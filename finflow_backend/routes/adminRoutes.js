@@ -1,0 +1,22 @@
+const express = require('express');
+const router = express.Router();
+
+const { getAllUsers, toggleAccountStatus, getAllTransactions, getAuditLogs } = require('../controller/adminController');
+const { verifyToken, verifyAdmin } = require('../middleware/authMiddleware');
+
+const { approveCard, getPendingCardApps, rejectCard } = require('../controller/cardController');
+router.get('/all-users', verifyToken, verifyAdmin, getAllUsers);
+router.put('/toggle-status/:userId', verifyToken, verifyAdmin, toggleAccountStatus);
+router.get('/all-transactions', verifyToken, verifyAdmin, getAllTransactions);
+
+router.get('/audit-logs', verifyToken, verifyAdmin, getAuditLogs);
+router.post('/card/approve', verifyToken, approveCard);
+
+
+router.get('/cards/pending', verifyToken, getPendingCardApps); // You might have an isAdmin middleware here too
+router.post('/card/approve', verifyToken, approveCard);
+router.post('/card/reject', verifyToken, rejectCard);
+
+module.exports = router;
+
+

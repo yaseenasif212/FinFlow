@@ -1,0 +1,31 @@
+/* client/src/styles/login.css */
+
+.glass-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+}
+
+@keyframes float-vertical {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-15px); }
+}
+
+@keyframes float-horizontal {
+    0%, 100% { transform: translateX(0px) rotate(0deg); }
+    50% { transform: translateX(10px) rotate(3deg); }
+}
+
+.animate-float-1 {
+    animation: float-vertical 6s ease-in-out infinite;
+}
+
+.animate-float-2 {
+    animation: float-horizontal 8s ease-in-out infinite reverse;
+}
+
+.animate-float-3 {
+    animation: float-vertical 7s ease-in-out infinite 1s;
+}
