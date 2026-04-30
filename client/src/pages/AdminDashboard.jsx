@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Users, LogOut, ShieldAlert, Activity, Search, ArrowRightLeft } from 'lucide-react';
+import { 
+    Users, LogOut, ShieldAlert, Activity, Search, ArrowRightLeft, 
+    Landmark, Clock, CheckCircle2, XCircle 
+} from 'lucide-react';
 import AdminCardApprover from '../components/AdminCardApprover';
 
 const AdminDashboard = () => {
@@ -9,10 +12,13 @@ const AdminDashboard = () => {
     const [users, setUsers] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [logs, setLogs] = useState([]);
+    
+    // --> NEW: Loan State <--
+    const [pendingLoans, setPendingLoans] = useState([]);
+    const [processingId, setProcessingId] = useState(null);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    
-    // --> NEW: Search State <--
     const [searchQuery, setSearchQuery] = useState(''); 
     
     const navigate = useNavigate();
@@ -39,6 +45,10 @@ const AdminDashboard = () => {
                 } else if (activeTab === 'logs') { 
                     const res = await axios.get('http://localhost:5000/api/admin/audit-logs', { headers: { Authorization: `Bearer ${token}` } });
                     if (res.data.success) setLogs(res.data.logs);
+                } else if (activeTab === 'loans') {
+                    // --> NEW: Fetch Pending Loans <--
+                    const res = await axios.get('http://localhost:5000/api/admin/applications/pending', { headers: { Authorization: `Bearer ${token}` } });
+                    if (res.data.success) setPendingLoans(res.data.pendingLoans);
                 }
             } catch (err) {
                 setError('Failed to fetch data. Access Denied.');
@@ -66,18 +76,41 @@ const AdminDashboard = () => {
         }
     };
 
+    // --> NEW: Loan Approval Handlers <--
+    const handleApproveLoan = async (loanId) => {
+        if (!window.confirm(`Authorize Loan ${loanId} and disburse funds?`)) return;
+        setProcessingId(loanId);
+        try {
+            const token = localStorage.getItem('finflow_token');
+            await axios.put(`http://localhost:5000/api/admin/loans/approve/${loanId}`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert('Loan approved! Funds securely injected into customer account.');
+            // Remove the approved loan from the screen instantly
+            setPendingLoans(prev => prev.filter(loan => loan.LoanID !== loanId)); 
+        } catch (err) {
+            alert('Error processing approval.');
+            console.error(err);
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleRejectLoan = async (loanId) => {
+        alert(`In a production environment, this would permanently reject ${loanId}.`);
+    };
+
     const handleLogout = () => {
         localStorage.clear();
         navigate('/login');
     };
 
-    // --> NEW: Tab Switcher that clears the search bar <--
     const handleTabSwitch = (tabName) => {
         setActiveTab(tabName);
-        setSearchQuery(''); // Clear search when switching tabs
+        setSearchQuery(''); 
     };
 
-    // --> NEW: Dynamic Filtering Logic <--
+    // Dynamic Filtering Logic
     const filteredUsers = users.filter(user => 
         user.Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.Email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -96,6 +129,12 @@ const AdminDashboard = () => {
         log.UserID?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         log.ActionID?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         log.Description?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const filteredLoans = pendingLoans.filter(loan => 
+        loan.LoanID?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loan.AccountNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        loan.LoanType?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -122,14 +161,14 @@ const AdminDashboard = () => {
                         <div className="bg-blue-50 p-4 rounded-full text-blue-500"><Users size={28} /></div>
                         <div>
                             <p className="text-sm text-slate-500 font-medium">Total Users</p>
-                            <p className="text-3xl font-bold text-slate-800">{users.length}</p>
+                            <p className="text-3xl font-bold text-slate-800">{users.length || '--'}</p>
                         </div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
                         <div className="bg-purple-50 p-4 rounded-full text-purple-500"><ArrowRightLeft size={28} /></div>
                         <div>
                             <p className="text-sm text-slate-500 font-medium">Total Transactions</p>
-                            <p className="text-3xl font-bold text-slate-800">{transactions.length}</p>
+                            <p className="text-3xl font-bold text-slate-800">{transactions.length || '--'}</p>
                         </div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
@@ -141,31 +180,35 @@ const AdminDashboard = () => {
                     </div>
                 </div>
 
-                {/* --- NEW: ADMIN CARD APPROVER PLACED HERE --- */}
                 <div className="mb-8">
                     <AdminCardApprover />
                 </div>
-                {/* ------------------------------------------- */}
 
-                <div className="flex gap-4 mb-6 border-b border-slate-200 pb-2">
-                    <button onClick={() => handleTabSwitch('users')} className={`px-4 py-2 font-bold transition-colors ${activeTab === 'users' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
+                {/* --- TABS --- */}
+                <div className="flex gap-4 mb-6 border-b border-slate-200 pb-2 overflow-x-auto hide-scrollbar">
+                    <button onClick={() => handleTabSwitch('users')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors ${activeTab === 'users' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
                         User Management
                     </button>
-                    <button onClick={() => handleTabSwitch('transactions')} className={`px-4 py-2 font-bold transition-colors ${activeTab === 'transactions' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <button onClick={() => handleTabSwitch('transactions')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors ${activeTab === 'transactions' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
                         Global Ledger
                     </button>
-                    <button onClick={() => handleTabSwitch('logs')} className={`px-4 py-2 font-bold transition-colors ${activeTab === 'logs' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <button onClick={() => handleTabSwitch('logs')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors ${activeTab === 'logs' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
                         Security Logs
+                    </button>
+                    {/* NEW LOAN TAB */}
+                    <button onClick={() => handleTabSwitch('loans')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors flex items-center gap-2 ${activeTab === 'loans' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
+                        Loan Approvals {pendingLoans.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pendingLoans.length}</span>}
                     </button>
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row gap-4 justify-between sm:items-center bg-white">
                         <h2 className="text-lg font-bold text-slate-800">
-                            {activeTab === 'users' ? 'User Directory' : activeTab === 'transactions' ? 'System Transactions' : 'Security Audit Logs'}
+                            {activeTab === 'users' ? 'User Directory' : 
+                             activeTab === 'transactions' ? 'System Transactions' : 
+                             activeTab === 'loans' ? 'Pending Loan Requests' : 'Security Audit Logs'}
                         </h2>
                         
-                        {/* --> NEW: Search Input wired to State <-- */}
                         <div className="relative w-full sm:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input 
@@ -187,6 +230,7 @@ const AdminDashboard = () => {
                             
                             {/* --- USERS TABLE --- */}
                             {activeTab === 'users' && (
+                                /* ... (Your existing User Table code remains exactly the same here) ... */
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
@@ -233,6 +277,7 @@ const AdminDashboard = () => {
 
                             {/* --- TRANSACTIONS TABLE --- */}
                             {activeTab === 'transactions' && (
+                                /* ... (Your existing Transactions Table code remains exactly the same here) ... */
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
@@ -266,6 +311,7 @@ const AdminDashboard = () => {
 
                             {/* --- SECURITY LOGS TABLE --- */}
                             {activeTab === 'logs' && (
+                                /* ... (Your existing Logs Table code remains exactly the same here) ... */
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
@@ -285,9 +331,7 @@ const AdminDashboard = () => {
                                                         {log.FormattedDate} at {log.FormattedTime}
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 font-mono text-xs font-bold text-blue-600">
-                                                    {log.UserID || 'SYSTEM'}
-                                                </td>
+                                                <td className="px-6 py-4 font-mono text-xs font-bold text-blue-600">{log.UserID || 'SYSTEM'}</td>
                                                 <td className="px-6 py-4">
                                                     <span className="px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
                                                         {log.ActionID}
@@ -297,18 +341,14 @@ const AdminDashboard = () => {
                                                     {log.TargetID && log.TargetID !== 'NULL' ? (
                                                         <span className="font-bold text-slate-700">{log.TargetID}</span>
                                                     ) : (
-                                                        <span className="italic text-slate-400">
-                                                            {log.ActionID === 'ACT-01' ? 'Auth System' : log.ActionID === 'ACT-02' ? 'User Dashboard' : log.ActionID === 'ACT-03' ? 'Login Portal' : 'System Component'}
-                                                        </span>
+                                                        <span className="italic text-slate-400">System Component</span>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-xs text-slate-600">
                                                     {log.Description && log.Description !== 'NULL' ? (
                                                         <span className="font-medium text-slate-800">{log.Description}</span>
                                                     ) : (
-                                                        <span className="text-slate-500">
-                                                            {log.ActionID === 'ACT-01' ? 'User authenticated and logged in successfully.' : log.ActionID === 'ACT-02' ? 'User accessed secure account data.' : log.ActionID === 'ACT-03' ? 'Failed login attempt detected.' : 'Standard system event recorded.'}
-                                                        </span>
+                                                        <span className="text-slate-500">Standard system event recorded.</span>
                                                     )}
                                                 </td>
                                             </tr>
@@ -318,7 +358,58 @@ const AdminDashboard = () => {
                                     </tbody>
                                 </table>
                             )}
-                            
+
+                            {/* --- NEW: LOAN APPROVALS TAB CONTENT --- */}
+                            {activeTab === 'loans' && (
+                                <div className="p-6 bg-slate-50">
+                                    {filteredLoans.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {filteredLoans.map(loan => (
+                                                <div key={loan.LoanID} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                                                    <div>
+                                                        <div className="flex justify-between items-start mb-3">
+                                                            <div className="flex items-center gap-2 text-[#2eb998]">
+                                                                <Landmark size={20} />
+                                                                <span className="font-bold text-sm">{loan.LoanType}</span>
+                                                            </div>
+                                                            <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded">{loan.LoanID}</span>
+                                                        </div>
+                                                        <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">Account Number</p>
+                                                        <p className="font-mono text-slate-800 mb-4">{loan.AccountNumber}</p>
+                                                        
+                                                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 mb-4">
+                                                            <p className="text-[10px] uppercase text-slate-500 font-bold">Requested Capital</p>
+                                                            <p className="text-xl font-bold text-slate-900">Rs. {loan.Amount.toLocaleString()}</p>
+                                                            <p className="text-xs text-slate-500 mt-1">Tenure: {loan.RepaymentDuration} Months</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex gap-2 mt-auto pt-2 border-t border-slate-100">
+                                                        <button 
+                                                            onClick={() => handleRejectLoan(loan.LoanID)}
+                                                            className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-1"
+                                                        >
+                                                            <XCircle size={16} /> Deny
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleApproveLoan(loan.LoanID)}
+                                                            disabled={processingId === loan.LoanID}
+                                                            className="flex-1 py-2 bg-[#2eb998] hover:bg-[#269e82] text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                                                        >
+                                                            {processingId === loan.LoanID ? '...' : <><CheckCircle2 size={16} /> Approve</>}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-12 text-slate-500 font-medium">
+                                            {pendingLoans.length === 0 ? "The queue is completely clear. No pending loans." : `No loans found matching "${searchQuery}"`}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                         </div>
                     )}
                 </div>

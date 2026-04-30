@@ -2,10 +2,12 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
-    LayoutDashboard, ShieldCheck, TrendingUp, 
-    ArrowUpRight, ArrowDownLeft, CheckCircle2, AlertCircle, Send, Lock,
-    CreditCard, Activity, Download
+    ShieldCheck, TrendingUp, ArrowUpRight, ArrowDownLeft, 
+    CheckCircle2, AlertCircle, Send, Lock, Download
 } from 'lucide-react';
+
+// 1. IMPORT YOUR NEW SIDEBAR COMPONENT
+import Sidebar from '../components/Sidebar'; 
 
 const CustomerDashboard = () => {
     const [accounts, setAccounts] = useState([]);
@@ -50,8 +52,6 @@ const CustomerDashboard = () => {
     }, [navigate]);
 
     useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
-
-    const handleLogout = () => { localStorage.clear(); navigate('/login'); };
 
     const handleTransferChange = (e) => {
         setTransferData({ ...transferData, [e.target.name]: e.target.value });
@@ -135,43 +135,8 @@ const CustomerDashboard = () => {
     return (
         <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen">
             
-          {/* SIDEBAR */}
-            <aside className="hidden md:flex flex-col h-full py-8 px-4 bg-slate-50 w-64 border-r border-slate-200/60 shrink-0 z-20">
-                <div className="mb-10 px-4">
-                    <h1 className="font-serif italic text-2xl text-indigo-950 font-bold tracking-tight">FinFlow.</h1>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">Digital Vault</p>
-                </div>
-                
-                {/* NAVIGATION LINKS */}
-                <nav className="flex-1 space-y-2">
-                    <button onClick={() => navigate('/dashboard')} className="w-full flex items-center gap-4 py-3 text-emerald-600 font-bold border-r-4 border-emerald-500 pl-4 bg-emerald-50/50 text-left">
-                        <LayoutDashboard size={20} /> <span className="font-serif text-lg tracking-tight">Dashboard</span>
-                    </button>
-                    
-                    <button onClick={() => navigate('/cards')} className="w-full flex items-center gap-4 py-3 text-slate-500 hover:text-indigo-950 pl-4 transition-colors font-bold text-left">
-                        <CreditCard size={20} /> <span className="font-serif text-lg tracking-tight">Virtual Cards</span>
-                    </button>
-
-                    <button onClick={() => navigate('/analytics')} className="w-full flex items-center gap-4 py-3 text-slate-500 hover:text-indigo-950 pl-4 transition-colors font-bold text-left">
-                        <Activity size={20} /> <span className="font-serif text-lg tracking-tight">Analytics</span>
-                    </button>
-                </nav>
-
-                <div className="mt-auto px-4">
-                    <button onClick={handleLogout} className="w-full py-3 rounded-full border-2 border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-100 transition-colors mb-6">
-                        Secure Logout
-                    </button>
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-indigo-900 text-white flex items-center justify-center font-bold text-lg uppercase">
-                            {user.name?.charAt(0)}
-                        </div>
-                        <div>
-                            <p className="text-sm font-bold text-indigo-950">{user.name?.split(' ')[0]}</p>
-                            <p className="text-[10px] text-slate-400">Vault ID: #{user.id?.slice(-4)}</p>
-                        </div>
-                    </div>
-                </div>
-            </aside>
+            {/* 2. INJECT THE REUSABLE SIDEBAR HERE */}
+            <Sidebar />
 
             {/* MAIN CONTENT AREA */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">

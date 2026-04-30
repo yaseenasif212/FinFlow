@@ -17,6 +17,8 @@ const { applyForCard, getActiveCards, getMyApplications, deleteCard } = require(
 
 const { getSpendingAnalytics } = require('../controller/customerController');
 const { downloadStatement } = require('../controller/customerController');  
+const { applyForLoan, getCustomerLoans } = require('../controller/customerController');
+const { getBeneficiaries, addBeneficiary, removeBeneficiary } = require('../controller/customerController');
 
 // Get Dashboard Data
 router.get('/dashboard', verifyToken, getDashboardData);
@@ -37,4 +39,16 @@ router.delete('/cards/:cardNumber', verifyToken, deleteCard);
 router.get('/analytics/:accountNumber', verifyToken, getSpendingAnalytics);
 router.get('/statement/:accountNumber', verifyToken, downloadStatement);
 
+router.post('/loan/apply', verifyToken, applyForLoan);
+router.get('/loans/:accountNumber', verifyToken, getCustomerLoans);
+
+
+
+
+
+router.get('/beneficiaries/:accountNumber', verifyToken, getBeneficiaries);
+router.post('/beneficiaries/add', verifyToken, addBeneficiary);
+router.delete('/beneficiaries/:beneficiaryId', verifyToken, removeBeneficiary);
 module.exports = router;
+
+

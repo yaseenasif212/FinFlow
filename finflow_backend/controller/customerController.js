@@ -436,7 +436,117 @@ const downloadStatement = async (req, res) => {
     }
 };
 
+// Add these to your existing customerController.js
+const applyForLoan = async (req, res) => {
+    const { accountNumber, loanType, amount, repaymentDuration } = req.body;
+    const loanId = `LN-${Date.now().toString().slice(-10)}`; 
+
+    try {
+        const pool = await sql.connect();
+        await pool.request()
+            .input('LoanID', sql.VarChar(20), loanId)
+            .input('AccountNumber', sql.VarChar(20), accountNumber)
+            .input('LoanType', sql.VarChar(50), loanType)
+            .input('Amount', sql.Decimal(15,2), amount)
+            .input('RepaymentDuration', sql.Int, repaymentDuration)
+            .input('Status', sql.VarChar(20), 'Pending')
+            .query(`
+                INSERT INTO dbo.LoanApplications (LoanID, AccountNumber, LoanType, Amount, RepaymentDuration, Status)
+                VALUES (@LoanID, @AccountNumber, @LoanType, @Amount, @RepaymentDuration, @Status)
+            `);
+            
+        res.status(200).json({ success: true, message: 'Loan application submitted.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Failed to apply.' });
+    }
+};
+
+const getCustomerLoans = async (req, res) => {
+    const { accountNumber } = req.params;
+    try {
+        const pool = await sql.connect();
+        const appsResult = await pool.request()
+            .input('AccountNumber', sql.VarChar(20), accountNumber)
+            .query(`SELECT * FROM dbo.LoanApplications WHERE AccountNumber = @AccountNumber`);
+            
+        const activeResult = await pool.request()
+            .input('AccountNumber', sql.VarChar(20), accountNumber)
+            .query(`SELECT * FROM dbo.ActiveLoans WHERE AccountNumber = @AccountNumber`);
+            
+        res.status(200).json({ success: true, applications: appsResult.recordset, activeLoans: activeResult.recordset });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Failed to fetch loans.' });
+    }
+};
+
+// ==========================================
+// CUSTOMER: Beneficiaries (Quick Contacts)
+// ==========================================
+const getBeneficiaries = async (req, res) => {
+    const { accountNumber } = req.params;
+    try {
+        const pool = await sql.connect();
+        const result = await pool.request()
+            .input('OwnerAccountNumber', sql.VarChar(20), accountNumber)
+            .query(`SELECT * FROM dbo.Beneficiaries WHERE OwnerAccountNumber = @OwnerAccountNumber ORDER BY DateAdded DESC`);
+            
+        res.status(200).json({ success: true, beneficiaries: result.recordset });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Failed to fetch contacts.' });
+    }
+};
+
+const addBeneficiary = async (req, res) => {
+    const { ownerAccount, beneficiaryAccount, nickname } = req.body;
+    const beneficiaryId = `BEN-${Date.now().toString().slice(-10)}`; 
+
+    try {
+        const pool = await sql.connect();
+        
+        // Optional but recommended: Check if the target account actually exists first!
+        const checkAcc = await pool.request()
+            .input('AccountNumber', sql.VarChar(20), beneficiaryAccount)
+            .query(`SELECT * FROM dbo.Accounts WHERE AccountNumber = @AccountNumber`);
+            
+        if (checkAcc.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'The account number you entered does not exist.' });
+        }
+
+        await pool.request()
+            .input('BeneficiaryID', sql.VarChar(20), beneficiaryId)
+            .input('OwnerAccountNumber', sql.VarChar(20), ownerAccount)
+            .input('BeneficiaryAccountNumber', sql.VarChar(20), beneficiaryAccount)
+            .input('Nickname', sql.VarChar(50), nickname)
+            .query(`
+                INSERT INTO dbo.Beneficiaries (BeneficiaryID, OwnerAccountNumber, BeneficiaryAccountNumber, Nickname, DateAdded)
+                VALUES (@BeneficiaryID, @OwnerAccountNumber, @BeneficiaryAccountNumber, @Nickname, GETDATE())
+            `);
+            
+        res.status(200).json({ success: true, message: 'Contact saved successfully!' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Failed to add contact.' });
+    }
+};
+
+const removeBeneficiary = async (req, res) => {
+    const { beneficiaryId } = req.params;
+    try {
+        const pool = await sql.connect();
+        await pool.request()
+            .input('BeneficiaryID', sql.VarChar(20), beneficiaryId)
+            .query(`DELETE FROM dbo.Beneficiaries WHERE BeneficiaryID = @BeneficiaryID`);
+            
+        res.status(200).json({ success: true, message: 'Contact removed.' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Failed to remove contact.' });
+    }
+};
 
 
 
-module.exports = { getDashboardData, transferMoney, depositMoney, withdrawMoney, updatePin,getSpendingAnalytics ,downloadStatement };
+
+
+module.exports = { getDashboardData, transferMoney, depositMoney, withdrawMoney, updatePin,getSpendingAnalytics ,downloadStatement,applyForLoan, getCustomerLoans,getBeneficiaries, addBeneficiary, removeBeneficiary  };

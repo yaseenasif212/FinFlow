@@ -98,5 +98,87 @@ const getAuditLogs = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error while fetching logs.' });
     }
 };
-// Make sure ALL FOUR functions are now exported!
-module.exports = { getAllUsers, toggleAccountStatus, getAllTransactions, getAuditLogs };
+
+const approveLoan = async (req, res) => {
+    const { loanId } = req.params;
+
+    try {
+        const pool = await sql.connect();
+        
+        // 1. Get the pending application
+        const checkReq = await pool.request()
+            .input('LoanID', sql.VarChar(20), loanId)
+            .query(`SELECT * FROM dbo.LoanApplications WHERE LoanID = @LoanID AND Status = 'Pending'`);
+            
+        if (checkReq.recordset.length === 0) return res.status(404).json({ success: false, message: 'Not found.' });
+        const app = checkReq.recordset[0];
+        
+        // 2. Math (5% interest)
+        const totalAmountToRepay = app.Amount * 1.05;
+        const monthlyInstallment = totalAmountToRepay / app.RepaymentDuration;
+        
+        // 3. The Secure Transaction
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+        
+        try {
+            // A. Approve App
+            await transaction.request().input('LoanID', sql.VarChar(20), app.LoanID)
+                .query(`UPDATE dbo.LoanApplications SET Status = 'Approved' WHERE LoanID = @LoanID`);
+                
+            // B. Create Active Debt
+            await transaction.request()
+                .input('LoanID', sql.VarChar(20), app.LoanID)
+                .input('AccountNumber', sql.VarChar(20), app.AccountNumber)
+                .input('TotalAmount', sql.Decimal(15,2), totalAmountToRepay)
+                .input('RemainingBalance', sql.Decimal(15,2), totalAmountToRepay)
+                .input('MonthlyInstallment', sql.Decimal(15,2), monthlyInstallment)
+                .query(`
+                    INSERT INTO dbo.ActiveLoans (LoanID, AccountNumber, TotalAmount, RemainingBalance, MonthlyInstallment, NextDueDate)
+                    VALUES (@LoanID, @AccountNumber, @TotalAmount, @RemainingBalance, @MonthlyInstallment, DATEADD(month, 1, GETDATE()))
+                `);
+                
+            // C. Inject Money into Bank Account
+            await transaction.request()
+                .input('AccountNumber', sql.VarChar(20), app.AccountNumber)
+                .input('Amount', sql.Decimal(15,2), app.Amount)
+                .query(`UPDATE dbo.Accounts SET Balance = Balance + @Amount WHERE AccountNumber = @AccountNumber`);
+                
+            await transaction.commit();
+            res.status(200).json({ success: true, message: 'Loan approved and funded!' });
+        } catch (txError) {
+            await transaction.rollback();
+            throw txError;
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Server error.' });
+    }
+};
+// ==========================================
+// ADMIN: Fetch Pending Queues
+// ==========================================
+const getPendingApplications = async (req, res) => {
+    try {
+        const pool = await sql.connect();
+        
+        // Fetch all pending loans from the specific table you showed me
+        const pendingLoans = await pool.request()
+            .query(`SELECT * FROM dbo.LoanApplications WHERE Status = 'Pending' ORDER BY LoanID DESC`);
+            
+        // Fetch all pending credit cards (I saw this table in your screenshot!)
+        const pendingCards = await pool.request()
+            .query(`SELECT * FROM dbo.CreditCardApplications WHERE Status = 'Pending'`);
+
+        res.status(200).json({ 
+            success: true, 
+            pendingLoans: pendingLoans.recordset,
+            pendingCards: pendingCards.recordset
+        });
+    } catch (err) {
+        console.error('Admin Fetch Error:', err);
+        res.status(500).json({ success: false, message: 'Failed to fetch pending applications.' });
+    }
+};
+
+module.exports = { getAllUsers, toggleAccountStatus, getAllTransactions, getAuditLogs, getPendingApplications,approveLoan };

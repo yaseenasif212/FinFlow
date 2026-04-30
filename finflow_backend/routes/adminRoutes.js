@@ -5,6 +5,10 @@ const { getAllUsers, toggleAccountStatus, getAllTransactions, getAuditLogs } = r
 const { verifyToken, verifyAdmin } = require('../middleware/authMiddleware');
 
 const { approveCard, getPendingCardApps, rejectCard } = require('../controller/cardController');
+
+
+
+const { getPendingApplications, approveLoan } = require('../controller/adminController');
 router.get('/all-users', verifyToken, verifyAdmin, getAllUsers);
 router.put('/toggle-status/:userId', verifyToken, verifyAdmin, toggleAccountStatus);
 router.get('/all-transactions', verifyToken, verifyAdmin, getAllTransactions);
@@ -17,6 +21,19 @@ router.get('/cards/pending', verifyToken, getPendingCardApps); // You might have
 router.post('/card/approve', verifyToken, approveCard);
 router.post('/card/reject', verifyToken, rejectCard);
 
+router.put('/loans/approve/:loanId', approveLoan); 
+router.get('/applications/pending', getPendingApplications);
+
+
 module.exports = router;
+
+
+
+
+
+
+
+
+
 
 

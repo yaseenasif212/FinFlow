@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { LayoutDashboard, CreditCard, PieChart as PieChartIcon, BarChart3, Activity, ArrowUpRight, ArrowDownLeft, ShieldCheck } from 'lucide-react';
+import { PieChart as PieChartIcon, BarChart3, ShieldCheck } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, RadialBarChart, RadialBar, PolarAngleAxis } from 'recharts';
+
+// 1. IMPORT YOUR NEW SIDEBAR COMPONENT
+import Sidebar from '../components/Sidebar';
 
 const Analytics = () => {
     const navigate = useNavigate();
@@ -46,8 +49,6 @@ const Analytics = () => {
 
     useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
 
-    const handleLogout = () => { localStorage.clear(); navigate('/login'); };
-
     const SPENDING_COLORS = ['#6366f1', '#f59e0b', '#8b5cf6', '#3b82f6'];
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] text-slate-500">Loading Financial Insights...</div>;
@@ -55,27 +56,8 @@ const Analytics = () => {
     return (
         <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen">
             
-            {/* SIDEBAR */}
-            <aside className="hidden md:flex flex-col h-full py-8 px-4 bg-slate-50 w-64 border-r border-slate-200/60 shrink-0 z-20">
-                <div className="mb-10 px-4">
-                    <h1 className="font-serif italic text-2xl text-indigo-950 font-bold tracking-tight">FinFlow.</h1>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">Digital Vault</p>
-                </div>
-                <nav className="flex-1 space-y-2">
-                    <button onClick={() => navigate('/dashboard')} className="w-full flex items-center gap-4 py-3 text-slate-500 hover:text-indigo-950 pl-4 transition-colors font-bold text-left">
-                        <LayoutDashboard size={20} /> <span className="font-serif text-lg tracking-tight">Dashboard</span>
-                    </button>
-                    <button onClick={() => navigate('/cards')} className="w-full flex items-center gap-4 py-3 text-slate-500 hover:text-indigo-950 pl-4 transition-colors font-bold text-left">
-                        <CreditCard size={20} /> <span className="font-serif text-lg tracking-tight">Virtual Cards</span>
-                    </button>
-                    <button className="w-full flex items-center gap-4 py-3 text-emerald-600 font-bold border-r-4 border-emerald-500 pl-4 bg-emerald-50/50 text-left">
-                        <Activity size={20} /> <span className="font-serif text-lg tracking-tight">Analytics</span>
-                    </button>
-                </nav>
-                <div className="mt-auto px-4">
-                    <button onClick={handleLogout} className="w-full py-3 rounded-full border-2 border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-100 transition-colors mb-6">Secure Logout</button>
-                </div>
-            </aside>
+            {/* 2. INJECT THE REUSABLE SIDEBAR HERE */}
+            <Sidebar />
 
             {/* MAIN CONTENT AREA */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">

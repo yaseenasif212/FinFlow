@@ -6,6 +6,8 @@ import AdminDashboard from './pages/AdminDashboard'; // <-- 1. Import it here
 import CustomerDashboard from './pages/CustomerDashboard';
 import CardManagement from './pages/CardManagement';
 import Analytics from './pages/Analytics';
+import LoanManagement from './pages/LoanManagement';
+import Beneficiaries from './pages/Beneficiaries';
 
 function App() {
   return (
@@ -22,10 +24,15 @@ function App() {
         <Route path="/dashboard" element={<CustomerDashboard />} />
         <Route path="/cards" element={<CardManagement />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/loans" element={<LoanManagement />} />
+        <Route path="/contacts" element={<Beneficiaries />} />
       </Routes>
     </Router>
   );
 }
+
+
+
 
 
 
