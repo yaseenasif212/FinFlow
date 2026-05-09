@@ -512,51 +512,51 @@ const removeBeneficiary = async (req, res) => {
 };
 
 // ==========================================
-// CUSTOMER: Smart Bill Splitter
+// CUSTOMER: Smart Bill Splitter (Upgraded to Request System)
 // ==========================================
 const splitBill = async (req, res) => {
     const { payerAccount, totalAmount, participants } = req.body;
     
+    // Calculate how much each friend owes
     const numberOfPeople = participants.length + 1;
     const splitAmount = parseFloat((totalAmount / numberOfPeople).toFixed(2));
 
     try {
         const pool = await sql.connect();
+
+        // 1. Get the Payer's Name to show in the notification bell
+        const userRes = await pool.request()
+            .input('Acc', sql.VarChar(20), payerAccount)
+            .query(`SELECT u.Name FROM dbo.Users u JOIN dbo.Accounts a ON u.UserID = a.UserID WHERE a.AccountNumber = @Acc`);
+        
+        const payerName = userRes.recordset[0] ? userRes.recordset[0].Name : 'A friend';
+
+        // 2. Create a transaction to batch insert all the requests safely
         const transaction = new sql.Transaction(pool);
         await transaction.begin();
 
         try {
             for (const friendAcc of participants) {
+                // Generate a unique Request ID
+                const reqId = `REQ-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
                 
                 await transaction.request()
-                    .input('FriendAcc', sql.VarChar(20), friendAcc)
-                    .input('Amount', sql.Decimal(15,2), splitAmount)
-                    .query(`UPDATE dbo.Accounts SET Balance = Balance - @Amount WHERE AccountNumber = @FriendAcc`);
-
-                await transaction.request()
-                    .input('PayerAcc', sql.VarChar(20), payerAccount)
-                    .input('Amount', sql.Decimal(15,2), splitAmount)
-                    .query(`UPDATE dbo.Accounts SET Balance = Balance + @Amount WHERE AccountNumber = @PayerAcc`);
-
-                const uniqueTrxId = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-
-                await transaction.request()
-                    .input('TransactionID', sql.VarChar(50), uniqueTrxId)
-                    .input('FriendAcc', sql.VarChar(20), friendAcc)
-                    .input('PayerAcc', sql.VarChar(20), payerAccount)
+                    .input('ReqID', sql.VarChar(50), reqId)
+                    .input('Type', sql.VarChar(20), 'SplitBill') // Tagging this as a Split Bill
+                    .input('Sender', sql.VarChar(20), payerAccount) // The person ASKING for money
+                    .input('Receiver', sql.VarChar(20), friendAcc) // The person who OWES money
+                    .input('Name', sql.VarChar(100), payerName)
                     .input('Amount', sql.Decimal(15,2), splitAmount)
                     .query(`
-                        INSERT INTO dbo.Transactions 
-                        (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime)
-                        VALUES 
-                        (@TransactionID, @FriendAcc, @PayerAcc, @Amount, 'Split Bill Settlement', GETDATE(), CONVERT(time, GETDATE()))
+                        INSERT INTO dbo.ActionRequests (RequestID, RequestType, SenderAcc, ReceiverAcc, SenderName, Amount, Status)
+                        VALUES (@ReqID, @Type, @Sender, @Receiver, @Name, @Amount, 'Pending')
                     `);
             }
             
             await transaction.commit();
             res.status(200).json({ 
                 success: true, 
-                message: `Bill split! Collected Rs. ${splitAmount} from each friend.`,
+                message: `Split requests sent to ${participants.length} friends securely!`,
                 splitAmount: splitAmount
             });
 
@@ -566,7 +566,7 @@ const splitBill = async (req, res) => {
         }
     } catch (err) {
         console.error('Split Bill Error:', err);
-        res.status(500).json({ success: false, message: 'Failed to process batch split. Funds rolled back.' });
+        res.status(500).json({ success: false, message: 'Failed to send split requests.' });
     }
 };
 
@@ -587,51 +587,85 @@ const getActiveLoans = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to fetch loans.' });
     }
 };
-
-
 const payLoanInstallment = async (req, res) => {
     const { accountNumber, loanId, paymentAmount } = req.body;
 
     try {
         const pool = await sql.connect();
+
+        // Get UserID for the Audit Log
+        const userRes = await pool.request()
+            .input('Acc', sql.VarChar(20), accountNumber)
+            .query(`SELECT UserID FROM dbo.Accounts WHERE AccountNumber = @Acc`);
+        const userId = userRes.recordset[0]?.UserID;
+
         const transaction = new sql.Transaction(pool);
         await transaction.begin();
 
         try {
-          
+            // 1. Deduct from User Account
             await transaction.request()
                 .input('AccNum', sql.VarChar(20), accountNumber)
-                .input('Amount', sql.Decimal(15,2), paymentAmount)
+                .input('Amount', sql.Decimal(15, 2), paymentAmount)
                 .query(`UPDATE dbo.Accounts SET Balance = Balance - @Amount WHERE AccountNumber = @AccNum`);
 
-            
+            // 2. Reduce Remaining Balance on the Loan
             await transaction.request()
-                .input('LoanID', sql.VarChar(20), loanId) 
-                .input('Amount', sql.Decimal(15,2), paymentAmount)
+                .input('LoanID', sql.VarChar(20), loanId)
+                .input('Amount', sql.Decimal(15, 2), paymentAmount)
                 .query(`UPDATE dbo.ActiveLoans SET RemainingBalance = RemainingBalance - @Amount WHERE LoanID = @LoanID`);
 
-           
-            
+            // 3. Create the Repayment Receipt
             const receiptId = `REP-${Date.now().toString().slice(-8)}`;
             await transaction.request()
                 .input('RepaymentID', sql.VarChar(20), receiptId)
                 .input('LoanID', sql.VarChar(20), loanId)
-                .input('Amount', sql.Decimal(15,2), paymentAmount)
+                .input('Amount', sql.Decimal(15, 2), paymentAmount)
                 .query(`
                     INSERT INTO dbo.LoanRepayments (RepaymentID, LoanID, AmountPaid, PaymentDate, PaymentStatus)
                     VALUES (@RepaymentID, @LoanID, @Amount, GETDATE(), 'On-Time')
                 `);
-           
+
+            // 4. Ledger Transaction (ReceiverAccount is NULL to avoid FK conflicts)
             const uniqueTrxId = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 100)}`;
             await transaction.request()
                 .input('TransactionID', sql.VarChar(50), uniqueTrxId)
                 .input('Sender', sql.VarChar(20), accountNumber)
-                .input('Amount', sql.Decimal(15,2), paymentAmount)
-               .query(`INSERT INTO dbo.Transactions (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime)
-        VALUES (@TransactionID, @Sender, 'PK-FIN-1002', @Amount, 'Loan Installment Payment', GETDATE(), CONVERT(time, GETDATE()))`);
+                .input('Amount', sql.Decimal(15, 2), paymentAmount)
+                .query(`
+                    INSERT INTO dbo.Transactions (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime)
+                    VALUES (@TransactionID, @Sender, NULL, @Amount, 'Loan Installment Payment', GETDATE(), CONVERT(time, GETDATE()))
+                `);
 
+            // 5. Check if fully paid
+            const checkRes = await transaction.request()
+                .input('LoanID', sql.VarChar(20), loanId)
+                .query(`SELECT RemainingBalance FROM dbo.ActiveLoans WHERE LoanID = @LoanID`);
+
+            const remaining = checkRes.recordset[0].RemainingBalance;
+            let isFullyPaid = false;
+
+            if (remaining <= 0) {
+                const logId = `LOG-${Date.now().toString().slice(-6)}`;
+
+                // We are using 'ACT-TRX' because we ensured it exists in Step 1
+                await transaction.request()
+                    .input('LogID', sql.VarChar(50), logId)
+                    .input('UID', sql.VarChar(50), userId)
+                    .input('LID', sql.VarChar(50), loanId)
+                    .query(`
+                        INSERT INTO dbo.AuditLogs (LogID, UserID, ActionID, TargetID, Description, LogDate, LogTime) 
+                        VALUES (@LogID, @UID, 'ACT-TRX', @LID, 'Customer successfully paid off their entire loan.', GETDATE(), CONVERT(time, GETDATE()))
+                    `);
+
+                isFullyPaid = true;
+            }
             await transaction.commit();
-            res.status(200).json({ success: true, message: `Installment of Rs. ${paymentAmount} paid successfully!` });
+            res.status(200).json({
+                success: true,
+                message: `Installment of Rs. ${paymentAmount} paid successfully!`,
+                isFullyPaid: isFullyPaid
+            });
 
         } catch (txError) {
             await transaction.rollback();
@@ -643,6 +677,126 @@ const payLoanInstallment = async (req, res) => {
     }
 };
 
+const createActionRequest = async (req, res) => {
+    const { requestType, senderAcc, receiverAcc, senderName, amount = 0 } = req.body;
+    const reqId = `REQ-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 100)}`;
+
+    try {
+        const pool = await sql.connect();
+        await pool.request()
+            .input('ReqID', sql.VarChar(50), reqId)
+            .input('Type', sql.VarChar(20), requestType)
+            .input('Sender', sql.VarChar(20), senderAcc)
+            .input('Receiver', sql.VarChar(20), receiverAcc)
+            .input('Name', sql.VarChar(100), senderName)
+            .input('Amount', sql.Decimal(15,2), amount)
+            .query(`
+                INSERT INTO dbo.ActionRequests (RequestID, RequestType, SenderAcc, ReceiverAcc, SenderName, Amount, Status)
+                VALUES (@ReqID, @Type, @Sender, @Receiver, @Name, @Amount, 'Pending')
+            `);
+        
+        res.status(200).json({ success: true, message: `${requestType} request sent securely!` });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Failed to send request.' });
+    }
+};
+
+// 2. Fetch Pending Requests for the Bell Icon
+const getPendingRequests = async (req, res) => {
+    const { accountNumber } = req.params;
+    try {
+        const pool = await sql.connect();
+        const result = await pool.request()
+            .input('Acc', sql.VarChar(20), accountNumber)
+            .query(`SELECT * FROM dbo.ActionRequests WHERE ReceiverAcc = @Acc AND Status = 'Pending' ORDER BY CreatedAt DESC`);
+            
+        res.status(200).json({ success: true, requests: result.recordset });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Failed to fetch notifications.' });
+    }
+};
+// 3. Process the Approval (The ACID Magic)
+const processActionRequest = async (req, res) => {
+    const { requestId, action, requestType, senderAcc, receiverAcc, amount } = req.body;
+
+    try {
+        const pool = await sql.connect();
+
+        // If they click decline, just kill the request
+        if (action === 'Reject') {
+            await pool.request().input('ID', sql.VarChar(50), requestId).query(`UPDATE dbo.ActionRequests SET Status = 'Rejected' WHERE RequestID = @ID`);
+            return res.status(200).json({ success: true, message: 'Request rejected securely.' });
+        }
+
+        if (action === 'Approve') {
+            const transaction = new sql.Transaction(pool);
+            await transaction.begin();
+
+            try {
+                if (requestType === 'Friend') {
+                    const recRes = await transaction.request().input('Acc', sql.VarChar(20), receiverAcc).query(`SELECT UserID FROM dbo.Accounts WHERE AccountNumber = @Acc`);
+                    const senRes = await transaction.request().input('Acc', sql.VarChar(20), senderAcc).query(`SELECT UserID FROM dbo.Accounts WHERE AccountNumber = @Acc`);
+                    
+                    const receiverUID = recRes.recordset[0].UserID;
+                    const senderUID = senRes.recordset[0].UserID;
+
+                    await transaction.request()
+                        .input('UID1', sql.VarChar(50), receiverUID).input('Acc1', sql.VarChar(20), senderAcc)
+                        .query(`INSERT INTO dbo.Beneficiaries (UserID, BeneficiaryAccountNumber, Nickname) VALUES (@UID1, @Acc1, 'New Connection')`);
+                    
+                    await transaction.request()
+                        .input('UID2', sql.VarChar(50), senderUID).input('Acc2', sql.VarChar(20), receiverAcc)
+                        .query(`INSERT INTO dbo.Beneficiaries (UserID, BeneficiaryAccountNumber, Nickname) VALUES (@UID2, @Acc2, 'New Connection')`);
+                } 
+                else if (requestType === 'Transfer') {
+                    await transaction.request().input('Sender', sql.VarChar(20), senderAcc).input('Amt', sql.Decimal(15,2), amount)
+                        .query(`UPDATE dbo.Accounts SET Balance = Balance - @Amt WHERE AccountNumber = @Sender`);
+                    
+                    await transaction.request().input('Receiver', sql.VarChar(20), receiverAcc).input('Amt', sql.Decimal(15,2), amount)
+                        .query(`UPDATE dbo.Accounts SET Balance = Balance + @Amt WHERE AccountNumber = @Receiver`);
+
+                    const trxId = `TRX-${Date.now().toString().slice(-6)}`;
+                    await transaction.request()
+                        .input('TID', sql.VarChar(50), trxId).input('Sender', sql.VarChar(20), senderAcc).input('Receiver', sql.VarChar(20), receiverAcc).input('Amt', sql.Decimal(15,2), amount)
+                        .query(`INSERT INTO dbo.Transactions (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime) VALUES (@TID, @Sender, @Receiver, @Amt, 'Approved Escrow Transfer', GETDATE(), CONVERT(time, GETDATE()))`);
+                }
+                else if (requestType === 'SplitBill') {
+                    // Reverse Transfer: The Receiver of the notification is PAYING the Sender
+                    await transaction.request()
+                        .input('Payer', sql.VarChar(20), receiverAcc)
+                        .input('Amt', sql.Decimal(15,2), amount)
+                        .query(`UPDATE dbo.Accounts SET Balance = Balance - @Amt WHERE AccountNumber = @Payer`);
+                    
+                    await transaction.request()
+                        .input('Payee', sql.VarChar(20), senderAcc)
+                        .input('Amt', sql.Decimal(15,2), amount)
+                        .query(`UPDATE dbo.Accounts SET Balance = Balance + @Amt WHERE AccountNumber = @Payee`);
+
+                    // Log it in the Ledger! (Sender=ReceiverAcc, Receiver=SenderAcc)
+                    const trxId = `TRX-${Date.now().toString().slice(-6)}`;
+                    await transaction.request()
+                        .input('TID', sql.VarChar(50), trxId)
+                        .input('Sender', sql.VarChar(20), receiverAcc) 
+                        .input('Receiver', sql.VarChar(20), senderAcc)
+                        .input('Amt', sql.Decimal(15,2), amount)
+                        .query(`INSERT INTO dbo.Transactions (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime) VALUES (@TID, @Sender, @Receiver, @Amt, 'Split Bill Settlement', GETDATE(), CONVERT(time, GETDATE()))`);
+                }
+
+                await transaction.request().input('ID', sql.VarChar(50), requestId).query(`UPDATE dbo.ActionRequests SET Status = 'Approved' WHERE RequestID = @ID`);
+                
+                await transaction.commit();
+                res.status(200).json({ success: true, message: `${requestType} Request Approved!` });
+            } catch (txErr) {
+                await transaction.rollback();
+                throw txErr;
+            }
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Failed to process request.' });
+    }
+};
 
 
-module.exports = { getDashboardData, transferMoney, depositMoney, withdrawMoney, updatePin, getSpendingAnalytics, downloadStatement, applyForLoan, getCustomerLoans, getBeneficiaries, addBeneficiary, removeBeneficiary, splitBill,getActiveLoans, payLoanInstallment  };
+
+module.exports = { getDashboardData, transferMoney, depositMoney, withdrawMoney, updatePin, getSpendingAnalytics, downloadStatement, applyForLoan, getCustomerLoans, getBeneficiaries, addBeneficiary, removeBeneficiary, splitBill,getActiveLoans, payLoanInstallment,createActionRequest, getPendingRequests, processActionRequest   };

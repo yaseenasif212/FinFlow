@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
-    Banknote, CalendarDays, Clock, CheckCircle2, XCircle, ChevronRight, Loader2, FileText
+    Banknote, CalendarDays, Clock, CheckCircle2, XCircle, ChevronRight, Loader2, FileText, AlertCircle, X
 } from 'lucide-react';
-
 import Sidebar from '../components/Sidebar';
 
 const LoanManagement = () => {
@@ -12,19 +11,25 @@ const LoanManagement = () => {
     const user = JSON.parse(localStorage.getItem('finflow_user') || '{}');
     
     const [accountNumber, setAccountNumber] = useState('');
+    const [accountBalance, setAccountBalance] = useState(0); 
     const [activeLoans, setActiveLoans] = useState([]);
     const [applications, setApplications] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     
-    // Form & Processing States
+    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     const [isApplying, setIsApplying] = useState(false);
-    const [processingId, setProcessingId] = useState(null); // Tracks which loan is currently being paid
+    const [processingId, setProcessingId] = useState(null);
 
     const [formData, setFormData] = useState({
         loanType: 'Personal Loan',
         amount: 50000,
         repaymentDuration: 12
     });
+
+    const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
+    };
 
     const fetchLoanData = async () => {
         const token = localStorage.getItem('finflow_token');
@@ -35,7 +40,10 @@ const LoanManagement = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const accNum = dashRes.data.accounts[0]?.AccountNumber;
+            const balance = dashRes.data.accounts[0]?.Balance; 
+            
             setAccountNumber(accNum);
+            setAccountBalance(balance || 0);
 
             if (accNum) {
                 const loanRes = await axios.get(`http://localhost:5000/api/customer/loans/${accNum}`, { 
@@ -49,6 +57,7 @@ const LoanManagement = () => {
             }
         } catch (err) {
             console.error("Failed to load loan data:", err);
+            showToast("Failed to load debt portfolio.", "error");
         } finally {
             setIsLoading(false);
         }
@@ -58,12 +67,27 @@ const LoanManagement = () => {
         fetchLoanData();
     }, [navigate]);
 
+    const blockInvalidChars = (e) => {
+        if (['e', 'E', '+', '-', '.'].includes(e.key)) {
+            e.preventDefault();
+        }
+    };
+
     const handleInputChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+        if (name === 'amount') {
+            if (!/^\d*$/.test(value)) return; 
+        }
+        setFormData({ ...formData, [name]: value });
     };
 
     const handleApply = async (e) => {
         e.preventDefault();
+        const requestedAmount = parseInt(formData.amount);
+        if (requestedAmount % 10000 !== 0) {
+            return showToast("Loan amount must be requested in multiples of 10,000.", "error");
+        }
+
         setIsApplying(true);
         try {
             const token = localStorage.getItem('finflow_token');
@@ -71,53 +95,77 @@ const LoanManagement = () => {
                 { 
                     accountNumber, 
                     loanType: formData.loanType,
-                    amount: formData.amount,
+                    amount: requestedAmount,
                     repaymentDuration: formData.repaymentDuration
                 }, 
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            alert('Loan application securely submitted for review!');
-            fetchLoanData(); // Refresh UI without reloading the whole page
+            showToast('Loan application securely submitted for review!');
+            fetchLoanData(); 
         } catch (err) {
-            alert('Failed to submit application.');
+            showToast('Failed to submit application.', 'error');
         } finally {
             setIsApplying(false);
         }
     };
 
-    // ---> NEW: LOAN REPAYMENT HANDLER <---
     const handleLoanPayment = async (loan) => {
+        const amountToPay = Math.min(loan.MonthlyInstallment, loan.RemainingBalance);
+
+        if (loan.RemainingBalance <= 0) {
+            return showToast("This loan is already fully paid off!", "error");
+        }
+
+        if (accountBalance < amountToPay) {
+            return showToast(`Insufficient funds.`, "error");
+        }
+
         setProcessingId(loan.LoanID);
         try {
             const token = localStorage.getItem('finflow_token');
             const res = await axios.post('http://localhost:5000/api/customer/loans/repay', {
                 accountNumber: accountNumber,
                 loanId: loan.LoanID,
-                paymentAmount: loan.MonthlyInstallment
+                paymentAmount: amountToPay 
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             if (res.data.success) {
-                alert(res.data.message);
-                fetchLoanData(); // Instantly refresh balance & progress bar!
+                if (res.data.isFullyPaid) {
+                    showToast(`🎉 Congratulations! Your loan is fully repaid. The Admin has been notified!`);
+                } else {
+                    showToast(`Successfully paid Rs. ${amountToPay.toLocaleString()}`);
+                }
+                fetchLoanData(); 
             }
         } catch (err) {
-            alert("Payment failed. Make sure you have enough funds in your main account.");
+            showToast("Payment failed. Ensure you have enough funds.", "error");
         } finally {
             setProcessingId(null);
         }
     };
 
-    const estimatedTotal = parseFloat(formData.amount) * 1.05;
-    const estimatedMonthly = estimatedTotal / parseInt(formData.repaymentDuration);
+    const estimatedTotal = parseFloat(formData.amount || 0) * 1.05;
+    const estimatedMonthly = estimatedTotal / parseInt(formData.repaymentDuration || 1);
+
+    // Filter logic to hide the box if loan is paid
+    const visibleLoans = activeLoans.filter(loan => parseFloat(loan.RemainingBalance) > 0);
+    const hasPendingApp = applications.some(app => app.Status === 'Pending');
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] text-slate-500">Loading Debt Portfolio...</div>;
 
-    const hasPendingApp = applications.some(app => app.Status === 'Pending');
-
     return (
-        <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen">
-            
+        <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen relative">
             <Sidebar />
+
+            {toast.show && (
+                <div className={`fixed bottom-8 right-8 z-50 flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl transition-all duration-300 text-white font-bold text-sm ${toast.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`}>
+                    {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+                    {toast.message}
+                    <button onClick={() => setToast({ show: false, message: '', type: 'success' })} className="ml-4 hover:opacity-75 transition-opacity">
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
 
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
                 <header className="w-full h-20 sticky top-0 z-40 bg-white/60 backdrop-blur-xl border-b border-slate-200/60 flex justify-end items-center px-8">
@@ -129,23 +177,21 @@ const LoanManagement = () => {
                     <p className="text-slate-500 text-lg mb-8">Manage your active debts and request new financing.</p>
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        
                         <div className="col-span-12 lg:col-span-7 space-y-8">
-                            
                             <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60">
                                 <h3 className="font-serif text-xl text-indigo-950 font-bold mb-6 flex items-center gap-2">
                                     <Banknote className="text-emerald-600" /> Active Financing
                                 </h3>
                                 
-                                {activeLoans.length > 0 ? (
+                                {visibleLoans.length > 0 ? (
                                     <div className="space-y-4">
-                                        {activeLoans.map(loan => {
-                                            // Calculate Progress Bar Width
-                                            const progress = loan.TotalAmount ? ((loan.TotalAmount - loan.RemainingBalance) / loan.TotalAmount) * 100 : 0;
+                                        {visibleLoans.map(loan => {
+                                            let progress = loan.TotalAmount ? ((loan.TotalAmount - loan.RemainingBalance) / loan.TotalAmount) * 100 : 0;
+                                            if (progress > 100) progress = 100;
+                                            if (progress < 0) progress = 0;
 
                                             return (
                                                 <div key={loan.LoanID} className="border border-slate-200 rounded-xl p-5 hover:border-emerald-200 transition-colors bg-[#f8fafc] relative overflow-hidden">
-                                                    {/* Accent Top Border */}
                                                     <div className="absolute top-0 left-0 w-full h-1 bg-amber-500"></div>
                                                     
                                                     <div className="flex justify-between items-start mb-4 pt-1">
@@ -158,7 +204,6 @@ const LoanManagement = () => {
                                                         </div>
                                                     </div>
 
-                                                    {/* ---> UPDATED: PROGRESS BAR <--- */}
                                                     <div className="mb-5 bg-white p-3 rounded-lg border border-slate-100">
                                                         <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400 mb-1.5">
                                                             <span>Paid: {progress.toFixed(0)}%</span>
@@ -173,14 +218,8 @@ const LoanManagement = () => {
                                                         <div>
                                                             <p className="text-[10px] uppercase text-slate-400 font-bold">Monthly Installment</p>
                                                             <p className="font-mono font-bold text-slate-700">Rs. {parseFloat(loan.MonthlyInstallment).toLocaleString()}</p>
-                                                            {loan.NextDueDate && (
-                                                                <p className="text-[10px] font-bold text-amber-600 mt-0.5 flex items-center gap-1">
-                                                                    <CalendarDays size={12}/> Due: {new Date(loan.NextDueDate).toLocaleDateString()}
-                                                                </p>
-                                                            )}
                                                         </div>
                                                         
-                                                        {/* ---> UPDATED: PAY INSTALLMENT BUTTON <--- */}
                                                         <button 
                                                             onClick={() => handleLoanPayment(loan)}
                                                             disabled={processingId === loan.LoanID}
@@ -194,8 +233,10 @@ const LoanManagement = () => {
                                         })}
                                     </div>
                                 ) : (
-                                    <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500">
-                                        You have no active loans.
+                                    <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500 flex flex-col items-center">
+                                        <CheckCircle2 size={40} className="mb-2 text-emerald-500 opacity-50" />
+                                        <p className="font-bold text-indigo-950">Debt Free!</p>
+                                        <p className="text-xs">You have no active loans to display.</p>
                                     </div>
                                 )}
                             </section>
@@ -206,7 +247,7 @@ const LoanManagement = () => {
                                 </h3>
                                 <div className="space-y-3">
                                     {applications.length > 0 ? applications.map(app => (
-                                        <div key={app.LoanID} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                        <div key={app.LoanID || app.ApplicationID} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                                             <div>
                                                 <p className="font-bold text-slate-800 text-sm">{app.LoanType}</p>
                                                 <p className="text-xs text-slate-500 mt-0.5">Req. Amount: Rs. {app.Amount.toLocaleString()}</p>
@@ -222,7 +263,6 @@ const LoanManagement = () => {
                                     )}
                                 </div>
                             </section>
-
                         </div>
 
                         <div className="col-span-12 lg:col-span-5">
@@ -232,7 +272,7 @@ const LoanManagement = () => {
                                 {hasPendingApp ? (
                                     <div className="p-5 bg-amber-50 rounded-xl border border-amber-100 text-amber-700 text-sm font-bold text-center">
                                         <Clock className="mx-auto mb-2 opacity-50" size={32} />
-                                        You currently have a loan application under review. Please wait for an Admin decision before applying again.
+                                        You currently have a loan application under review.
                                     </div>
                                 ) : (
                                     <form onSubmit={handleApply} className="space-y-5">
@@ -253,7 +293,9 @@ const LoanManagement = () => {
                                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Requested Amount (PKR)</label>
                                             <input 
                                                 type="number" name="amount" required min="10000" max="5000000" step="10000"
-                                                value={formData.amount} onChange={handleInputChange}
+                                                value={formData.amount} 
+                                                onKeyDown={blockInvalidChars}
+                                                onChange={handleInputChange}
                                                 className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg py-3 px-4 outline-none focus:border-indigo-500 font-bold text-lg"
                                             />
                                         </div>
@@ -270,12 +312,8 @@ const LoanManagement = () => {
 
                                         <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100 mt-6">
                                             <div className="flex justify-between items-center mb-2">
-                                                <span className="text-xs font-bold text-slate-500">Interest Rate (Flat)</span>
+                                                <span className="text-xs font-bold text-slate-500">Interest Rate</span>
                                                 <span className="text-xs font-bold text-indigo-900">5.00%</span>
-                                            </div>
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="text-xs font-bold text-slate-500">Total to Repay</span>
-                                                <span className="text-xs font-bold text-indigo-900">Rs. {estimatedTotal.toLocaleString()}</span>
                                             </div>
                                             <div className="flex justify-between items-center pt-2 border-t border-indigo-100">
                                                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Est. Monthly</span>
@@ -283,14 +321,13 @@ const LoanManagement = () => {
                                             </div>
                                         </div>
 
-                                        <button type="submit" disabled={isApplying} className="w-full py-4 mt-2 bg-indigo-950 text-white rounded-lg font-bold text-sm shadow-xl hover:bg-indigo-900 hover:shadow-2xl transition-all flex items-center justify-center gap-2">
+                                        <button type="submit" disabled={isApplying} className="w-full py-4 mt-2 bg-indigo-950 text-white rounded-lg font-bold text-sm shadow-xl hover:bg-indigo-900 transition-all flex items-center justify-center gap-2">
                                             {isApplying ? <Loader2 className="animate-spin" size={18}/> : <>Submit Application <ChevronRight size={18}/></>}
                                         </button>
                                     </form>
                                 )}
                             </div>
                         </div>
-
                     </div>
                 </div>
             </main>

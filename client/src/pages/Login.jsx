@@ -1,19 +1,44 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Eye, EyeOff, AlertCircle, X } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, X, CheckCircle2 } from 'lucide-react';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
+    // TOAST STATE
+    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+    const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
+    };
+
     const handleLogin = async (e) => {
         e.preventDefault();
-        setError('');
+
+        // --- STRICT CONSTRAINTS ---
+
+        // 1. Empty Check
+        if (!email.trim() || !password.trim()) {
+            return showToast("Please fill in all fields.", "error");
+        }
+
+        // 2. Strict Email Regex Validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return showToast("Please enter a valid email format.", "error");
+        }
+
+        // 3. Password Minimum Length Check
+        if (password.length < 6) {
+            return showToast("Invalid password length.", "error");
+        }
+
         setIsLoading(true);
 
         try {
@@ -23,22 +48,38 @@ const Login = () => {
                 localStorage.setItem('finflow_token', response.data.token);
                 localStorage.setItem('finflow_user', JSON.stringify(response.data.user));
                 
-                if (response.data.user.role === 'Admin') {
-                    navigate('/admin-dashboard');
-                } else {
-                    navigate('/dashboard'); 
-                }
+                showToast("Login successful! Decrypting vault...", "success");
+                
+                setTimeout(() => {
+                    if (response.data.user.role === 'Admin') {
+                        navigate('/admin-dashboard');
+                    } else {
+                        navigate('/dashboard'); 
+                    }
+                }, 1000);
             }
                 
         } catch (err) {
-            setError(err.response?.data?.message || 'Authentication failed. Check your connection.');
+            showToast(err.response?.data?.message || 'Authentication failed. Check your connection.', 'error');
         } finally {
             setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-[#f3f4f6] flex items-center justify-center p-4">
+        <div className="min-h-screen bg-[#f3f4f6] flex items-center justify-center p-4 relative">
+            
+            {/* TOAST NOTIFICATION */}
+            {toast.show && (
+                <div className={`fixed bottom-8 right-8 z-50 flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl transition-all duration-300 text-white font-bold text-sm ${toast.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`}>
+                    {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+                    {toast.message}
+                    <button onClick={() => setToast({ show: false, message: '', type: 'success' })} className="ml-4 hover:opacity-75 transition-opacity">
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
+
             <div className="max-w-[900px] w-full bg-white rounded-2xl shadow-xl flex flex-col md:flex-row overflow-hidden min-h-[550px]">
                 
                 <div className="w-full md:w-[55%] p-10 flex flex-col relative">
@@ -55,12 +96,6 @@ const Login = () => {
                         <h1 className="text-3xl font-extrabold text-[#333] mb-8 text-center tracking-tight">
                             Login to Your Account
                         </h1>
-
-                        {error && (
-                            <div className="w-full mb-6 bg-red-50 border border-red-100 p-2.5 rounded-lg flex items-center gap-2 text-xs text-red-600">
-                                <AlertCircle className="w-4 h-4 shrink-0" /> {error}
-                            </div>
-                        )}
 
                         <form onSubmit={handleLogin} className="w-full space-y-5">
                             <div>
@@ -95,7 +130,7 @@ const Login = () => {
                                 <button
                                     type="submit"
                                     disabled={isLoading}
-                                    className="h-11 w-40 bg-[#2eb998] hover:bg-[#259b7d] text-white font-bold rounded-full transition-colors flex items-center justify-center disabled:opacity-70 text-sm tracking-wide"
+                                    className="h-11 w-40 bg-[#2eb998] hover:bg-[#259b7d] text-white font-bold rounded-full transition-colors flex items-center justify-center disabled:opacity-70 text-sm tracking-wide shadow-md"
                                 >
                                     {isLoading ? 'Please wait...' : 'Sign In'}
                                 </button>

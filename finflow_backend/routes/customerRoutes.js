@@ -22,7 +22,7 @@ const { getActiveLoans, payLoanInstallment } = require('../controller/customerCo
 const { getBeneficiaries, addBeneficiary, removeBeneficiary } = require('../controller/customerController');
 const { splitBill } = require('../controller/customerController');
 
-
+const { createActionRequest, getPendingRequests, processActionRequest } = require('../controller/customerController');
 
 router.get('/dashboard', verifyToken, getDashboardData);
 
@@ -58,6 +58,12 @@ router.post('/transfer/split', verifyToken, splitBill);
 
 router.get('/loans/active/:accountNumber', verifyToken, getActiveLoans);
 router.post('/loans/repay', verifyToken, payLoanInstallment);
+
+
+
+router.post('/actions/request', verifyToken, createActionRequest);
+router.get('/actions/pending/:accountNumber', verifyToken, getPendingRequests);
+router.post('/actions/process', verifyToken, processActionRequest);
 module.exports = router;
 
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
     Users, LogOut, ShieldAlert, Activity, Search, ArrowRightLeft, 
-    Landmark, Clock, CheckCircle2, XCircle, AlertTriangle
+    Landmark, Clock, CheckCircle2, XCircle, AlertTriangle, X
 } from 'lucide-react';
 import AdminCardApprover from '../components/AdminCardApprover';
 
@@ -12,17 +12,20 @@ const AdminDashboard = () => {
     const [users, setUsers] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [logs, setLogs] = useState([]);
-    
-    // --> NEW: Loan State <--
     const [pendingLoans, setPendingLoans] = useState([]);
     const [processingId, setProcessingId] = useState(null);
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState(''); 
+    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     
     const navigate = useNavigate();
     const adminUser = JSON.parse(localStorage.getItem('finflow_user') || '{}');
+
+    const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -46,7 +49,6 @@ const AdminDashboard = () => {
                     const res = await axios.get('http://localhost:5000/api/admin/audit-logs', { headers: { Authorization: `Bearer ${token}` } });
                     if (res.data.success) setLogs(res.data.logs);
                 } else if (activeTab === 'loans') {
-                    // --> NEW: Fetch Pending Loans <--
                     const res = await axios.get('http://localhost:5000/api/admin/applications/pending', { headers: { Authorization: `Bearer ${token}` } });
                     if (res.data.success) setPendingLoans(res.data.pendingLoans);
                 }
@@ -72,24 +74,21 @@ const AdminDashboard = () => {
                 setUsers(users.map(u => u.UserID === userId ? { ...u, AccountStatus: res.data.newStatus } : u));
             }
         } catch (err) {
-            alert('Failed to update status');
+            showToast('Failed to update status.', 'error');
         }
     };
 
-    // --> NEW: Loan Approval Handlers <--
     const handleApproveLoan = async (loanId) => {
-        if (!window.confirm(`Authorize Loan ${loanId} and disburse funds?`)) return;
         setProcessingId(loanId);
         try {
             const token = localStorage.getItem('finflow_token');
             await axios.put(`http://localhost:5000/api/admin/loans/approve/${loanId}`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            alert('Loan approved! Funds securely injected into customer account.');
-            // Remove the approved loan from the screen instantly
+            showToast('Loan approved! Funds securely injected into customer account.');
             setPendingLoans(prev => prev.filter(loan => loan.LoanID !== loanId)); 
         } catch (err) {
-            alert('Error processing approval.');
+            showToast('Error processing approval.', 'error');
             console.error(err);
         } finally {
             setProcessingId(null);
@@ -97,7 +96,20 @@ const AdminDashboard = () => {
     };
 
     const handleRejectLoan = async (loanId) => {
-        alert(`In a production environment, this would permanently reject ${loanId}.`);
+        setProcessingId(loanId);
+        try {
+            const token = localStorage.getItem('finflow_token');
+            await axios.put(`http://localhost:5000/api/admin/loans/reject/${loanId}`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            showToast('Loan application successfully rejected.');
+            setPendingLoans(prev => prev.filter(loan => loan.LoanID !== loanId)); 
+        } catch (err) {
+            showToast('Error processing rejection.', 'error');
+            console.error(err);
+        } finally {
+            setProcessingId(null);
+        }
     };
 
     const handleLogout = () => {
@@ -110,7 +122,6 @@ const AdminDashboard = () => {
         searchQuery && setSearchQuery(''); 
     };
 
-    // Dynamic Filtering Logic
     const filteredUsers = users.filter(user => 
         user.Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.Email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -137,9 +148,7 @@ const AdminDashboard = () => {
         loan.LoanType?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    // --> NEW: Smart Risk Assessor <--
     const getRiskProfile = (accountNumber) => {
-        // Generates a consistent number between 300 and 850 based on the account string
         let hash = 0;
         for (let i = 0; i < accountNumber.length; i++) {
             hash = accountNumber.charCodeAt(i) + ((hash << 5) - hash);
@@ -152,7 +161,18 @@ const AdminDashboard = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans">
+        <div className="min-h-screen bg-slate-50 font-sans relative">
+            
+            {toast.show && (
+                <div className={`fixed bottom-8 right-8 z-50 flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl transition-all duration-300 text-white font-bold text-sm ${toast.type === 'error' ? 'bg-red-500' : 'bg-[#2eb998]'}`}>
+                    {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+                    {toast.message}
+                    <button onClick={() => setToast({ show: false, message: '', type: 'success' })} className="ml-4 hover:opacity-75 transition-opacity">
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
+
             <nav className="bg-[#2eb998] text-white px-8 py-4 flex justify-between items-center shadow-md">
                 <div className="flex items-center gap-3">
                     <div className="bg-white p-2 rounded-lg text-[#2eb998]">
@@ -198,7 +218,6 @@ const AdminDashboard = () => {
                     <AdminCardApprover />
                 </div>
 
-                {/* --- TABS --- */}
                 <div className="flex gap-4 mb-6 border-b border-slate-200 pb-2 overflow-x-auto hide-scrollbar">
                     <button onClick={() => handleTabSwitch('users')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors ${activeTab === 'users' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
                         User Management
@@ -209,7 +228,6 @@ const AdminDashboard = () => {
                     <button onClick={() => handleTabSwitch('logs')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors ${activeTab === 'logs' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
                         Security Logs
                     </button>
-                    {/* NEW LOAN TAB */}
                     <button onClick={() => handleTabSwitch('loans')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors flex items-center gap-2 ${activeTab === 'loans' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
                         Loan Approvals {pendingLoans.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pendingLoans.length}</span>}
                     </button>
@@ -242,7 +260,6 @@ const AdminDashboard = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             
-                            {/* --- USERS TABLE --- */}
                             {activeTab === 'users' && (
                                 <table className="w-full text-left border-collapse">
                                     <thead>
@@ -288,7 +305,6 @@ const AdminDashboard = () => {
                                 </table>
                             )}
 
-                            {/* --- TRANSACTIONS TABLE --- */}
                             {activeTab === 'transactions' && (
                                 <table className="w-full text-left border-collapse">
                                     <thead>
@@ -321,7 +337,6 @@ const AdminDashboard = () => {
                                 </table>
                             )}
 
-                            {/* --- SECURITY LOGS TABLE --- */}
                             {activeTab === 'logs' && (
                                 <table className="w-full text-left border-collapse">
                                     <thead>
@@ -370,7 +385,6 @@ const AdminDashboard = () => {
                                 </table>
                             )}
 
-                       {/* --- UPDATED: LOAN APPROVALS WITH RISK ASSESSOR --- */}
                             {activeTab === 'loans' && (
                                 <div className="p-6 bg-slate-50">
                                     {filteredLoans.length > 0 ? (
@@ -380,7 +394,6 @@ const AdminDashboard = () => {
                                                 return (
                                                     <div key={loan.LoanID} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
                                                         
-                                                        {/* Dynamic Risk Color Bar at the top */}
                                                         <div className={`absolute top-0 left-0 w-full h-1.5 ${risk.color.split(' ')[0].replace('bg-', 'bg-').replace('50', '500')}`}></div>
 
                                                         <div>
@@ -400,7 +413,6 @@ const AdminDashboard = () => {
                                                                 <p className="text-xs text-slate-500 mt-1">Tenure: {loan.RepaymentDuration} Months</p>
                                                             </div>
 
-                                                            {/* --> NEW: AI RISK BADGE <-- */}
                                                             <div className={`mb-5 p-2.5 rounded-lg border flex items-center justify-between ${risk.color}`}>
                                                                 <div className="flex items-center gap-2">
                                                                     <AlertTriangle size={16} />

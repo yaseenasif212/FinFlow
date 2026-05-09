@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { PieChart, Activity, ShieldCheck } from 'lucide-react';
+import { PieChart, Activity, ShieldCheck, Lock } from 'lucide-react'; // Added Lock icon
 import Sidebar from '../components/Sidebar';
 
 const Analytics = () => {
@@ -21,7 +21,6 @@ const Analytics = () => {
             
             if (dashRes.data.success && dashRes.data.accounts.length > 0) {
                 const accNum = dashRes.data.accounts[0].AccountNumber;
-                // Fetch the real analytics data from your backend
                 const analyticsRes = await axios.get(`http://localhost:5000/api/customer/analytics/${accNum}`, { headers: { Authorization: `Bearer ${token}` }});
                 
                 if (analyticsRes.data.success) {
@@ -39,31 +38,26 @@ const Analytics = () => {
 
     useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
 
-    // ==========================================
-    // INTELLIGENT INSIGHTS CALCULATIONS
-    // ==========================================
-    const SPENDING_COLORS = ['bg-indigo-500', 'bg-amber-500', 'bg-emerald-500', 'bg-purple-500', 'bg-rose-500'];
-    
     const totalSpent = spendingData.reduce((sum, item) => sum + (item.value || 0), 0);
+    
+ 
+    const SPENDING_COLORS = ['bg-indigo-500', 'bg-amber-500', 'bg-emerald-500', 'bg-purple-500', 'bg-rose-500'];
     
     const spendingBreakdown = spendingData.map((item, idx) => ({
         name: item.name,
         amount: item.value,
         color: SPENDING_COLORS[idx % SPENDING_COLORS.length],
         percentage: totalSpent > 0 ? ((item.value / totalSpent) * 100).toFixed(1) : 0
-    })).sort((a, b) => b.amount - a.amount); // Sort largest to smallest
+    })).sort((a, b) => b.amount - a.amount);
 
-    // Determine the color of the Credit Score gauge based on the real score
     const scoreColor = creditScore >= 700 ? 'text-emerald-500' : creditScore >= 580 ? 'text-amber-500' : 'text-red-500';
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] text-slate-500">Loading Financial Insights...</div>;
 
     return (
         <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen">
-            
             <Sidebar />
 
-            {/* MAIN CONTENT AREA */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
                 <header className="w-full h-20 sticky top-0 z-40 bg-white/60 backdrop-blur-xl border-b border-slate-200/60 flex justify-end items-center px-8">
                     <p className="text-xs font-bold text-indigo-950 uppercase tracking-widest">{user.name}</p>
@@ -78,32 +72,46 @@ const Analytics = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         
-                        {/* 1. CREDIT SCORE / HEALTH GAUGE (Pure SVG) */}
+                        {/* 1. CREDIT SCORE / HEALTH GAUGE */}
                         <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200/60 flex flex-col justify-center items-center text-center relative overflow-hidden">
-                            <Activity className={`absolute -right-4 -top-4 w-32 h-32 opacity-5 ${scoreColor}`} />
-                            <ShieldCheck className={`mb-2 opacity-80 ${scoreColor}`} size={28} />
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Live Credit Score</p>
-                            
-                            <div className="relative">
-                                <svg className="w-32 h-32 transform -rotate-90">
-                                    <circle cx="64" cy="64" r="50" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-slate-100" />
-                                    <circle cx="64" cy="64" r="50" stroke="currentColor" strokeWidth="12" fill="transparent" 
-                                        strokeDasharray={`${(creditScore / 850) * 314} 314`} 
-                                        strokeLinecap="round"
-                                        className={`${scoreColor} transition-all duration-1000 ease-out`} 
-                                    />
-                                </svg>
-                                <div className="absolute inset-0 flex items-center justify-center flex-col">
-                                    <span className="text-3xl font-bold text-slate-800">{Math.round(creditScore)}</span>
+                            {totalSpent > 0 ? (
+                                <>
+                                    <Activity className={`absolute -right-4 -top-4 w-32 h-32 opacity-5 ${scoreColor}`} />
+                                    <ShieldCheck className={`mb-2 opacity-80 ${scoreColor}`} size={28} />
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Live Credit Score</p>
+                                    
+                                    <div className="relative">
+                                        <svg className="w-32 h-32 transform -rotate-90">
+                                            <circle cx="64" cy="64" r="50" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-slate-100" />
+                                            <circle cx="64" cy="64" r="50" stroke="currentColor" strokeWidth="12" fill="transparent" 
+                                                strokeDasharray={`${(creditScore / 850) * 314} 314`} 
+                                                strokeLinecap="round"
+                                                className={`${scoreColor} transition-all duration-1000 ease-out`} 
+                                            />
+                                        </svg>
+                                        <div className="absolute inset-0 flex items-center justify-center flex-col">
+                                            <span className="text-3xl font-bold text-slate-800">{Math.round(creditScore)}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <p className={`text-sm font-bold mt-4 uppercase tracking-wider ${scoreColor}`}>
+                                        {creditScore >= 700 ? 'Excellent Standing' : creditScore >= 580 ? 'Fair Standing' : 'High Risk'}
+                                    </p>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full">
+                                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                                        <Lock size={24} className="text-slate-300" />
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Credit Score Locked</p>
+                                    <p className="text-xs text-slate-500 leading-relaxed px-4">
+                                        Insufficient transaction history to calculate your score.
+                                    </p>
                                 </div>
-                            </div>
-                            
-                            <p className={`text-sm font-bold mt-4 uppercase tracking-wider ${scoreColor}`}>
-                                {creditScore >= 700 ? 'Excellent Standing' : creditScore >= 580 ? 'Fair Standing' : 'High Risk'}
-                            </p>
+                            )}
                         </div>
 
-                        {/* 2. SMART BUDGET BREAKDOWN (Stacked Progress Bar) */}
+                        {/* 2. SMART BUDGET BREAKDOWN */}
                         <div className="md:col-span-2 bg-white rounded-2xl p-8 shadow-sm border border-slate-200/60 flex flex-col justify-center">
                             <div className="flex items-center justify-between mb-8">
                                 <div>
@@ -117,7 +125,6 @@ const Analytics = () => {
 
                             {totalSpent > 0 ? (
                                 <>
-                                    {/* Stacked Progress Bar */}
                                     <div className="w-full h-4 flex rounded-full overflow-hidden mb-6 shadow-inner">
                                         {spendingBreakdown.map((item, idx) => (
                                             <div 
@@ -129,7 +136,6 @@ const Analytics = () => {
                                         ))}
                                     </div>
 
-                                    {/* Legend Matrix */}
                                     <div className="grid grid-cols-2 gap-4">
                                         {spendingBreakdown.map((item, idx) => (
                                             <div key={idx} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -146,7 +152,7 @@ const Analytics = () => {
                                     </div>
                                 </>
                             ) : (
-                                <div className="py-12 text-center text-slate-400 text-sm font-medium border-2 border-dashed border-slate-100 rounded-xl mt-2">
+                                <div className="py-12 text-center text-slate-400 text-sm font-medium border-2 border-dashed border-slate-100 rounded-xl">
                                     No spending data to analyze yet. Start making transfers!
                                 </div>
                             )}
