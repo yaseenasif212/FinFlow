@@ -3,7 +3,6 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 
 const loginUser = async (req, res) => {
-    // In login, we usually only need email and password from the frontend
     const { email, password } = req.body;
 
     try {
@@ -18,7 +17,6 @@ const loginUser = async (req, res) => {
             return res.status(401).json({ success: false, message: 'Invalid credentials.' });
         }
 
-        // FIXED: Define the user BEFORE trying to compare their password!
         const user = userResult.recordset[0];
 
         // 2. Prevent Brute Force Attacks
@@ -93,7 +91,6 @@ const loginUser = async (req, res) => {
 };
 
 const registerUser = async (req, res) => {
-    // FIXED: Added 'accountType' to the destructuring list so it doesn't crash on step 4
     const { name, cnic, email, password, phone, address, transactionPin, accountType } = req.body;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -102,7 +99,6 @@ const registerUser = async (req, res) => {
     }
 
     try {
-        // FIXED: Moved hashing inside the try block for safety
         const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -128,7 +124,7 @@ const registerUser = async (req, res) => {
             .input('Name', sql.VarChar, name)
             .input('CNIC', sql.VarChar, cnic)
             .input('Email', sql.VarChar, email)
-            .input('Password', sql.VarChar, hashedPassword) // FIXED: We are now actually inserting the scrambled password!
+            .input('Password', sql.VarChar, hashedPassword)
             .input('Phone', sql.VarChar, phone || '')
             .input('Address', sql.Text, address || '')
             .input('Role', sql.VarChar, 'Customer')

@@ -1,18 +1,17 @@
 const { sql } = require('../config/db');
+
 // ==========================================
 // 1. CUSTOMER: Apply for Virtual Card
 // ==========================================
 const applyForCard = async (req, res) => {
     const { accountNumber, requestedLimit } = req.body; 
 
-    
     if (!accountNumber || !requestedLimit || requestedLimit < 1000 || requestedLimit > 500000) {
         return res.status(400).json({ success: false, message: 'Limit must be between Rs. 1,000 and Rs. 500,000.' });
     }
     try {
         const pool = await sql.connect();
 
-        // FIXED: Removed the "Status = 'Active'" check since your table doesn't have a Status column!
         const checkResult = await pool.request()
             .input('AccountNumber', sql.VarChar, accountNumber)
             .query(`
@@ -56,7 +55,6 @@ const getActiveCards = async (req, res) => {
         const result = await pool.request()
             .input('AccountNumber', sql.VarChar, accountNumber)
             .query(`
-                -- FIXED: We now calculate AvailableCredit on the fly for your frontend!
                 SELECT 
                     CardNumber AS CardID, 
                     CardNumber, 
@@ -80,7 +78,7 @@ const getActiveCards = async (req, res) => {
 const approveCard = async (req, res) => {
     const { applicationId, accountNumber, approvedLimit } = req.body;
 
-if (!applicationId || !accountNumber || !approvedLimit || approvedLimit < 1000 || approvedLimit > 500000) {
+    if (!applicationId || !accountNumber || !approvedLimit || approvedLimit < 1000 || approvedLimit > 500000) {
         return res.status(400).json({ success: false, message: 'Approved limit must be between Rs. 1,000 and Rs. 500,000.' });
     }
     try {
@@ -99,7 +97,6 @@ if (!applicationId || !accountNumber || !approvedLimit || approvedLimit < 1000 |
                 SET Status = 'Approved' 
                 WHERE ApplicationID = @AppID;
 
-                -- FIXED: Inserting matching your exact screenshot columns
                 INSERT INTO dbo.ActiveCreditCards (CardNumber, AccountNumber, CreditLimit, OutstandingBalance, NextDueDate)
                 VALUES (@CardNumber, @AccountNumber, @ApprovedLimit, 0.00, DATEADD(MONTH, 1, GETDATE()));
 
@@ -191,6 +188,5 @@ const deleteCard = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to delete card' });
     }
 };
-module.exports = { applyForCard, getActiveCards, approveCard, getPendingCardApps, rejectCard, getMyApplications, deleteCard }; // <- Add deleteCard to exports
 
-
+module.exports = { applyForCard, getActiveCards, approveCard, getPendingCardApps, rejectCard, getMyApplications, deleteCard };

@@ -18,20 +18,17 @@ const Login = () => {
 
         try {
             const response = await axios.post('http://localhost:5000/api/auth/login', { email, password });
-           // Inside Login.jsx -> handleLogin function
 
-                if (response.data.success) {
-                    // 1. Save token and user data
-                    localStorage.setItem('finflow_token', response.data.token);
-                    localStorage.setItem('finflow_user', JSON.stringify(response.data.user));
-                    
-                    // 2. Check the Role and Route accordingly!
-                    if (response.data.user.role === 'Admin') {
-                        navigate('/admin-dashboard');
-                    } else {
-                        navigate('/dashboard'); // Normal customer
-                    }
+            if (response.data.success) {
+                localStorage.setItem('finflow_token', response.data.token);
+                localStorage.setItem('finflow_user', JSON.stringify(response.data.user));
+                
+                if (response.data.user.role === 'Admin') {
+                    navigate('/admin-dashboard');
+                } else {
+                    navigate('/dashboard'); 
                 }
+            }
                 
         } catch (err) {
             setError(err.response?.data?.message || 'Authentication failed. Check your connection.');
@@ -42,13 +39,10 @@ const Login = () => {
 
     return (
         <div className="min-h-screen bg-[#f3f4f6] flex items-center justify-center p-4">
-            {/* Main Modal Container */}
             <div className="max-w-[900px] w-full bg-white rounded-2xl shadow-xl flex flex-col md:flex-row overflow-hidden min-h-[550px]">
                 
-                {/* Left Side: Form */}
                 <div className="w-full md:w-[55%] p-10 flex flex-col relative">
                     
-                    {/* Fake Logo to match reference */}
                     <div className="flex items-center gap-2 mb-8">
                         <div className="w-6 h-6 border-2 border-[#2eb998] rounded-sm flex items-center justify-center">
                             <div className="w-2 h-2 bg-[#2eb998] rounded-sm"></div>
@@ -56,10 +50,8 @@ const Login = () => {
                         <span className="text-xl font-semibold text-gray-700">FinFlow</span>
                     </div>
 
-                    {/* Centered Form Content */}
                     <div className="flex-1 flex flex-col items-center justify-center w-full max-w-[320px] mx-auto">
                         
-                        {/* Title with extra bottom margin since socials are gone */}
                         <h1 className="text-3xl font-extrabold text-[#333] mb-8 text-center tracking-tight">
                             Login to Your Account
                         </h1>
@@ -70,7 +62,6 @@ const Login = () => {
                             </div>
                         )}
 
-                        {/* Form */}
                         <form onSubmit={handleLogin} className="w-full space-y-5">
                             <div>
                                 <input
@@ -113,9 +104,7 @@ const Login = () => {
                     </div>
                 </div>
 
-                {/* Right Side: Promo */}
                 <div className="w-full md:w-[45%] bg-gradient-to-br from-[#3bceac] to-[#2eb998] p-10 flex flex-col items-center justify-center text-center relative overflow-hidden">
-                    {/* Close button */}
                     <button className="absolute top-5 right-5 text-white/70 hover:text-white transition-colors">
                         <X size={24} />
                     </button>
@@ -126,7 +115,6 @@ const Login = () => {
                             Sign up and discover a great amount of new opportunities!
                         </p>
                         
-                        {/* Updated Sign Up Button with onClick Navigation */}
                         <button 
                             type="button"
                             onClick={() => navigate('/register')}
@@ -136,7 +124,6 @@ const Login = () => {
                         </button>
                     </div>
 
-                    {/* Abstract Background Elements */}
                     <div className="absolute top-12 left-12 w-32 h-32 rounded-full border-[16px] border-white/10"></div>
                     <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-white/10 rounded-full"></div>
                     <div className="absolute top-1/3 right-10 w-0 h-0 border-l-[40px] border-l-transparent border-r-[40px] border-r-transparent border-b-[70px] border-b-white/5 rotate-45"></div>

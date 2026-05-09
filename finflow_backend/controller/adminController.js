@@ -5,7 +5,6 @@ const getAllUsers = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // We use a LEFT JOIN so we still get the Admin even if they don't have a checking account
         const result = await pool.request().query(`
             SELECT u.UserID, u.Name, u.Email, u.CNIC, u.Role, 
                    a.AccountNumber, a.AccountStatus
@@ -28,7 +27,6 @@ const toggleAccountStatus = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // If it's active, freeze it. If it's frozen, make it active.
         const newStatus = currentStatus === 'Active' ? 'Frozen' : 'Active';
 
         await pool.request()
@@ -52,15 +50,11 @@ const toggleAccountStatus = async (req, res) => {
     }
 };
 
-// ... existing getAllUsers and toggleAccountStatus functions ...
-
 // 3. Fetch the Global Ledger (All Transactions)
 const getAllTransactions = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // Fetch all transactions, newest first. 
-        // (Assuming your table is named Transactions)
         const result = await pool.request().query(`
             SELECT * FROM Transactions 
             ORDER BY TransactionDate DESC, TransactionTime DESC
@@ -78,7 +72,6 @@ const getAuditLogs = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // Let SQL handle the formatting so JavaScript doesn't mess up the timezones!
         const result = await pool.request().query(`
             SELECT TOP 100 
                 LogID, 
@@ -105,7 +98,6 @@ const approveLoan = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // 1. Get the pending application
         const checkReq = await pool.request()
             .input('LoanID', sql.VarChar(20), loanId)
             .query(`SELECT * FROM dbo.LoanApplications WHERE LoanID = @LoanID AND Status = 'Pending'`);
@@ -113,20 +105,16 @@ const approveLoan = async (req, res) => {
         if (checkReq.recordset.length === 0) return res.status(404).json({ success: false, message: 'Not found.' });
         const app = checkReq.recordset[0];
         
-        // 2. Math (5% interest)
         const totalAmountToRepay = app.Amount * 1.05;
         const monthlyInstallment = totalAmountToRepay / app.RepaymentDuration;
         
-        // 3. The Secure Transaction
         const transaction = new sql.Transaction(pool);
         await transaction.begin();
         
         try {
-            // A. Approve App
             await transaction.request().input('LoanID', sql.VarChar(20), app.LoanID)
                 .query(`UPDATE dbo.LoanApplications SET Status = 'Approved' WHERE LoanID = @LoanID`);
                 
-            // B. Create Active Debt
             await transaction.request()
                 .input('LoanID', sql.VarChar(20), app.LoanID)
                 .input('AccountNumber', sql.VarChar(20), app.AccountNumber)
@@ -138,7 +126,6 @@ const approveLoan = async (req, res) => {
                     VALUES (@LoanID, @AccountNumber, @TotalAmount, @RemainingBalance, @MonthlyInstallment, DATEADD(month, 1, GETDATE()))
                 `);
                 
-            // C. Inject Money into Bank Account
             await transaction.request()
                 .input('AccountNumber', sql.VarChar(20), app.AccountNumber)
                 .input('Amount', sql.Decimal(15,2), app.Amount)
@@ -155,6 +142,7 @@ const approveLoan = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error.' });
     }
 };
+
 // ==========================================
 // ADMIN: Fetch Pending Queues
 // ==========================================
@@ -162,11 +150,9 @@ const getPendingApplications = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // Fetch all pending loans from the specific table you showed me
         const pendingLoans = await pool.request()
             .query(`SELECT * FROM dbo.LoanApplications WHERE Status = 'Pending' ORDER BY LoanID DESC`);
             
-        // Fetch all pending credit cards (I saw this table in your screenshot!)
         const pendingCards = await pool.request()
             .query(`SELECT * FROM dbo.CreditCardApplications WHERE Status = 'Pending'`);
 
@@ -181,4 +167,4 @@ const getPendingApplications = async (req, res) => {
     }
 };
 
-module.exports = { getAllUsers, toggleAccountStatus, getAllTransactions, getAuditLogs, getPendingApplications,approveLoan };
+module.exports = { getAllUsers, toggleAccountStatus, getAllTransactions, getAuditLogs, getPendingApplications, approveLoan };

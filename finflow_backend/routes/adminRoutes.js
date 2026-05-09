@@ -17,7 +17,7 @@ router.get('/audit-logs', verifyToken, verifyAdmin, getAuditLogs);
 router.post('/card/approve', verifyToken, approveCard);
 
 
-router.get('/cards/pending', verifyToken, getPendingCardApps); // You might have an isAdmin middleware here too
+router.get('/cards/pending', verifyToken, getPendingCardApps); 
 router.post('/card/approve', verifyToken, approveCard);
 router.post('/card/reject', verifyToken, rejectCard);
 

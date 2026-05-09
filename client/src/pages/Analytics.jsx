@@ -1,10 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { PieChart as PieChartIcon, BarChart3, ShieldCheck } from 'lucide-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, RadialBarChart, RadialBar, PolarAngleAxis } from 'recharts';
-
-// 1. IMPORT YOUR NEW SIDEBAR COMPONENT
+import { PieChart, Activity, ShieldCheck } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 
 const Analytics = () => {
@@ -12,10 +9,8 @@ const Analytics = () => {
     const user = JSON.parse(localStorage.getItem('finflow_user') || '{}');
     
     const [spendingData, setSpendingData] = useState([]);
-    const [cashFlowData, setCashFlowData] = useState([]);
     const [creditScore, setCreditScore] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
-    const [chartType, setChartType] = useState('pie'); 
 
     const fetchAnalytics = useCallback(async () => {
         const token = localStorage.getItem('finflow_token');
@@ -26,18 +21,13 @@ const Analytics = () => {
             
             if (dashRes.data.success && dashRes.data.accounts.length > 0) {
                 const accNum = dashRes.data.accounts[0].AccountNumber;
+                // Fetch the real analytics data from your backend
                 const analyticsRes = await axios.get(`http://localhost:5000/api/customer/analytics/${accNum}`, { headers: { Authorization: `Bearer ${token}` }});
                 
                 if (analyticsRes.data.success) {
-                    const { spending, cashFlow, creditScore } = analyticsRes.data.data;
-                    setSpendingData(spending);
-                    setCreditScore(creditScore);
-                    
-                    // Format Cash Flow for Recharts
-                    setCashFlowData([
-                        { name: 'Income (In)', amount: cashFlow.MoneyIn, fill: '#10b981' },
-                        { name: 'Expenses (Out)', amount: cashFlow.MoneyOut, fill: '#ef4444' }
-                    ]);
+                    const { spending, creditScore } = analyticsRes.data.data;
+                    setSpendingData(spending || []);
+                    setCreditScore(creditScore || 0);
                 }
             }
         } catch (err) {
@@ -49,14 +39,28 @@ const Analytics = () => {
 
     useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
 
-    const SPENDING_COLORS = ['#6366f1', '#f59e0b', '#8b5cf6', '#3b82f6'];
+    // ==========================================
+    // INTELLIGENT INSIGHTS CALCULATIONS
+    // ==========================================
+    const SPENDING_COLORS = ['bg-indigo-500', 'bg-amber-500', 'bg-emerald-500', 'bg-purple-500', 'bg-rose-500'];
+    
+    const totalSpent = spendingData.reduce((sum, item) => sum + (item.value || 0), 0);
+    
+    const spendingBreakdown = spendingData.map((item, idx) => ({
+        name: item.name,
+        amount: item.value,
+        color: SPENDING_COLORS[idx % SPENDING_COLORS.length],
+        percentage: totalSpent > 0 ? ((item.value / totalSpent) * 100).toFixed(1) : 0
+    })).sort((a, b) => b.amount - a.amount); // Sort largest to smallest
+
+    // Determine the color of the Credit Score gauge based on the real score
+    const scoreColor = creditScore >= 700 ? 'text-emerald-500' : creditScore >= 580 ? 'text-amber-500' : 'text-red-500';
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] text-slate-500">Loading Financial Insights...</div>;
 
     return (
         <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen">
             
-            {/* 2. INJECT THE REUSABLE SIDEBAR HERE */}
             <Sidebar />
 
             {/* MAIN CONTENT AREA */}
@@ -65,101 +69,89 @@ const Analytics = () => {
                     <p className="text-xs font-bold text-indigo-950 uppercase tracking-widest">{user.name}</p>
                 </header>
 
-                <div className="flex-1 overflow-y-auto p-8 max-w-7xl mx-auto w-full space-y-8">
+                <div className="flex-1 overflow-y-auto p-8 max-w-6xl mx-auto w-full space-y-8">
                     
                     <div>
-                        <h2 className="font-serif text-4xl text-indigo-950 font-bold tracking-tight mb-2">Financial Insights</h2>
-                        <p className="text-slate-500 text-lg">Track your credit score, cash flow, and spending habits.</p>
+                        <h2 className="font-serif text-4xl text-indigo-950 font-bold tracking-tight mb-2">Intelligent Insights</h2>
+                        <p className="text-slate-500 text-lg">Your automated financial health and budgeting analysis.</p>
                     </div>
 
-                    {/* TOP ROW: CREDIT SCORE & CASH FLOW SUMMARY */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         
-                        {/* CREDIT SCORE GAUGE */}
-                        <div className="bg-gradient-to-br from-indigo-950 to-slate-900 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col items-center justify-center text-white min-h-[250px]">
-                            <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/5 rounded-full blur-2xl"></div>
-                            <ShieldCheck className="absolute top-6 left-6 text-emerald-400 opacity-50" size={32}/>
-                            <h3 className="font-serif text-lg font-bold mb-2 z-10 text-slate-200">Live Credit Score</h3>
+                        {/* 1. CREDIT SCORE / HEALTH GAUGE (Pure SVG) */}
+                        <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200/60 flex flex-col justify-center items-center text-center relative overflow-hidden">
+                            <Activity className={`absolute -right-4 -top-4 w-32 h-32 opacity-5 ${scoreColor}`} />
+                            <ShieldCheck className={`mb-2 opacity-80 ${scoreColor}`} size={28} />
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Live Credit Score</p>
                             
-                            <div className="h-40 w-full relative z-10">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <RadialBarChart cx="50%" cy="50%" innerRadius="70%" outerRadius="100%" barSize={15} data={[{ name: 'Score', value: creditScore, fill: '#34d399' }]} startAngle={180} endAngle={0}>
-                                        <PolarAngleAxis type="number" domain={[300, 850]} angleAxisId={0} tick={false} />
-                                        <RadialBar minAngle={15} background clockWise dataKey="value" cornerRadius={10} />
-                                    </RadialBarChart>
-                                </ResponsiveContainer>
-                                <div className="absolute top-[45%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                                    <p className="text-4xl font-bold font-serif">{creditScore}</p>
-                                    <p className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold mt-1">Excellent</p>
+                            <div className="relative">
+                                <svg className="w-32 h-32 transform -rotate-90">
+                                    <circle cx="64" cy="64" r="50" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-slate-100" />
+                                    <circle cx="64" cy="64" r="50" stroke="currentColor" strokeWidth="12" fill="transparent" 
+                                        strokeDasharray={`${(creditScore / 850) * 314} 314`} 
+                                        strokeLinecap="round"
+                                        className={`${scoreColor} transition-all duration-1000 ease-out`} 
+                                    />
+                                </svg>
+                                <div className="absolute inset-0 flex items-center justify-center flex-col">
+                                    <span className="text-3xl font-bold text-slate-800">{Math.round(creditScore)}</span>
                                 </div>
                             </div>
+                            
+                            <p className={`text-sm font-bold mt-4 uppercase tracking-wider ${scoreColor}`}>
+                                {creditScore >= 700 ? 'Excellent Standing' : creditScore >= 580 ? 'Fair Standing' : 'High Risk'}
+                            </p>
                         </div>
 
-                        {/* CASH FLOW GRAPH */}
-                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60 lg:col-span-2 min-h-[250px] flex flex-col">
-                            <h3 className="font-serif text-xl text-indigo-950 font-bold mb-4">Cash Flow Overview</h3>
-                            <div className="flex-1 w-full min-h-[180px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={cashFlowData} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9"/>
-                                        <XAxis type="number" hide />
-                                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: '#475569', fontWeight: 600, fontSize: 12}} width={100}/>
-                                        <Tooltip cursor={{fill: '#f8fafc'}} formatter={(value) => `Rs. ${value.toLocaleString()}`} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
-                                        <Bar dataKey="amount" radius={[0, 6, 6, 0]} barSize={30}>
-                                            {cashFlowData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
+                        {/* 2. SMART BUDGET BREAKDOWN (Stacked Progress Bar) */}
+                        <div className="md:col-span-2 bg-white rounded-2xl p-8 shadow-sm border border-slate-200/60 flex flex-col justify-center">
+                            <div className="flex items-center justify-between mb-8">
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Outflow</p>
+                                    <p className="text-3xl font-bold text-slate-800">Rs. {totalSpent.toLocaleString()}</p>
+                                </div>
+                                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                                    <PieChart size={24} />
+                                </div>
                             </div>
-                        </div>
 
+                            {totalSpent > 0 ? (
+                                <>
+                                    {/* Stacked Progress Bar */}
+                                    <div className="w-full h-4 flex rounded-full overflow-hidden mb-6 shadow-inner">
+                                        {spendingBreakdown.map((item, idx) => (
+                                            <div 
+                                                key={idx} 
+                                                className={`h-full ${item.color} transition-all duration-1000`} 
+                                                style={{ width: `${item.percentage}%` }}
+                                                title={`${item.name}: ${item.percentage}%`}
+                                            ></div>
+                                        ))}
+                                    </div>
+
+                                    {/* Legend Matrix */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {spendingBreakdown.map((item, idx) => (
+                                            <div key={idx} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-3 h-3 rounded-full ${item.color} shadow-sm`}></div>
+                                                    <span className="text-sm font-bold text-slate-700 truncate">{item.name}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="block text-xs font-mono font-bold text-slate-900">Rs. {item.amount.toLocaleString()}</span>
+                                                    <span className="block text-[10px] text-slate-400 font-bold mt-0.5">{item.percentage}%</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="py-12 text-center text-slate-400 text-sm font-medium border-2 border-dashed border-slate-100 rounded-xl mt-2">
+                                    No spending data to analyze yet. Start making transfers!
+                                </div>
+                            )}
+                        </div>
                     </div>
-
-                    {/* BOTTOM ROW: SMART BUDGETING TOGGLE */}
-                    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60">
-                        <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
-                            <h3 className="font-serif text-2xl text-indigo-950 font-bold">Smart Budgeting Categories</h3>
-                            <div className="flex bg-slate-100 p-1 rounded-lg">
-                                <button onClick={() => setChartType('pie')} className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-all ${chartType === 'pie' ? 'bg-white text-indigo-950 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                                    <PieChartIcon size={16}/> Pie Chart
-                                </button>
-                                <button onClick={() => setChartType('bar')} className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-all ${chartType === 'bar' ? 'bg-white text-indigo-950 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                                    <BarChart3 size={16}/> Bar Graph
-                                </button>
-                            </div>
-                        </div>
-
-                        {spendingData.length > 0 ? (
-                            <div className="h-80 w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    {chartType === 'pie' ? (
-                                        <PieChart>
-                                            <Pie data={spendingData} cx="50%" cy="50%" innerRadius={80} outerRadius={110} paddingAngle={5} dataKey="value">
-                                                {spendingData.map((entry, index) => <Cell key={`cell-${index}`} fill={SPENDING_COLORS[index % SPENDING_COLORS.length]} />)}
-                                            </Pie>
-                                            <Tooltip formatter={(value) => `Rs. ${value.toLocaleString()}`} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
-                                            <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                                        </PieChart>
-                                    ) : (
-                                        <BarChart data={spendingData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0"/>
-                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontWeight: 600}} dy={10}/>
-                                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontWeight: 600}} tickFormatter={(val) => `Rs.${val/1000}k`}/>
-                                            <Tooltip cursor={{fill: '#f8fafc'}} formatter={(value) => `Rs. ${value.toLocaleString()}`} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
-                                            <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={60}>
-                                                {spendingData.map((entry, index) => <Cell key={`cell-${index}`} fill={SPENDING_COLORS[index % SPENDING_COLORS.length]} />)}
-                                            </Bar>
-                                        </BarChart>
-                                    )}
-                                </ResponsiveContainer>
-                            </div>
-                        ) : (
-                            <div className="text-center py-20 text-slate-400 bg-slate-50 rounded-xl border border-slate-100">
-                                No spending data available yet. Make a transfer to see your charts!
-                            </div>
-                        )}
-                    </div>
-
                 </div>
             </main>
         </div>

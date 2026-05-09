@@ -5,7 +5,6 @@ import {
     Banknote, CalendarDays, Clock, CheckCircle2, XCircle, ChevronRight, Loader2, FileText
 } from 'lucide-react';
 
-// 1. IMPORT YOUR REUSABLE SIDEBAR
 import Sidebar from '../components/Sidebar';
 
 const LoanManagement = () => {
@@ -17,45 +16,45 @@ const LoanManagement = () => {
     const [applications, setApplications] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     
-    // Application Form State
+    // Form & Processing States
     const [isApplying, setIsApplying] = useState(false);
+    const [processingId, setProcessingId] = useState(null); // Tracks which loan is currently being paid
+
     const [formData, setFormData] = useState({
         loanType: 'Personal Loan',
         amount: 50000,
         repaymentDuration: 12
     });
 
-    useEffect(() => {
-        const fetchLoanData = async () => {
-            const token = localStorage.getItem('finflow_token');
-            if (!token) return navigate('/login');
+    const fetchLoanData = async () => {
+        const token = localStorage.getItem('finflow_token');
+        if (!token) return navigate('/login');
 
-            try {
-                // 1. Get the user's primary account number
-                const dashRes = await axios.get('http://localhost:5000/api/customer/dashboard', { 
+        try {
+            const dashRes = await axios.get('http://localhost:5000/api/customer/dashboard', { 
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const accNum = dashRes.data.accounts[0]?.AccountNumber;
+            setAccountNumber(accNum);
+
+            if (accNum) {
+                const loanRes = await axios.get(`http://localhost:5000/api/customer/loans/${accNum}`, { 
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                const accNum = dashRes.data.accounts[0]?.AccountNumber;
-                setAccountNumber(accNum);
-
-                if (accNum) {
-                    // 2. Fetch Active Loans & Applications
-                    const loanRes = await axios.get(`http://localhost:5000/api/customer/loans/${accNum}`, { 
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    
-                    if (loanRes.data.success) {
-                        setActiveLoans(loanRes.data.activeLoans || []);
-                        setApplications(loanRes.data.applications || []);
-                    }
+                
+                if (loanRes.data.success) {
+                    setActiveLoans(loanRes.data.activeLoans || []);
+                    setApplications(loanRes.data.applications || []);
                 }
-            } catch (err) {
-                console.error("Failed to load loan data:", err);
-            } finally {
-                setIsLoading(false);
             }
-        };
+        } catch (err) {
+            console.error("Failed to load loan data:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchLoanData();
     }, [navigate]);
 
@@ -78,7 +77,7 @@ const LoanManagement = () => {
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             alert('Loan application securely submitted for review!');
-            window.location.reload(); 
+            fetchLoanData(); // Refresh UI without reloading the whole page
         } catch (err) {
             alert('Failed to submit application.');
         } finally {
@@ -86,7 +85,28 @@ const LoanManagement = () => {
         }
     };
 
-    // Dynamic calculation for the UI preview (5% interest)
+    // ---> NEW: LOAN REPAYMENT HANDLER <---
+    const handleLoanPayment = async (loan) => {
+        setProcessingId(loan.LoanID);
+        try {
+            const token = localStorage.getItem('finflow_token');
+            const res = await axios.post('http://localhost:5000/api/customer/loans/repay', {
+                accountNumber: accountNumber,
+                loanId: loan.LoanID,
+                paymentAmount: loan.MonthlyInstallment
+            }, { headers: { Authorization: `Bearer ${token}` } });
+
+            if (res.data.success) {
+                alert(res.data.message);
+                fetchLoanData(); // Instantly refresh balance & progress bar!
+            }
+        } catch (err) {
+            alert("Payment failed. Make sure you have enough funds in your main account.");
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
     const estimatedTotal = parseFloat(formData.amount) * 1.05;
     const estimatedMonthly = estimatedTotal / parseInt(formData.repaymentDuration);
 
@@ -97,10 +117,8 @@ const LoanManagement = () => {
     return (
         <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen">
             
-            {/* 2. USE THE SIDEBAR COMPONENT */}
             <Sidebar />
 
-            {/* MAIN CONTENT */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
                 <header className="w-full h-20 sticky top-0 z-40 bg-white/60 backdrop-blur-xl border-b border-slate-200/60 flex justify-end items-center px-8">
                     <p className="text-xs font-bold text-indigo-950 uppercase tracking-widest">{user.name}</p>
@@ -112,10 +130,8 @@ const LoanManagement = () => {
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         
-                        {/* LEFT COLUMN: ACTIVE LOANS & HISTORY */}
                         <div className="col-span-12 lg:col-span-7 space-y-8">
                             
-                            {/* ACTIVE LOANS */}
                             <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60">
                                 <h3 className="font-serif text-xl text-indigo-950 font-bold mb-6 flex items-center gap-2">
                                     <Banknote className="text-emerald-600" /> Active Financing
@@ -123,33 +139,59 @@ const LoanManagement = () => {
                                 
                                 {activeLoans.length > 0 ? (
                                     <div className="space-y-4">
-                                        {activeLoans.map(loan => (
-                                            <div key={loan.LoanID} className="border border-slate-200 rounded-xl p-5 hover:border-emerald-200 transition-colors bg-[#f8fafc]">
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div>
-                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Loan ID: {loan.LoanID}</p>
-                                                        <p className="font-bold text-indigo-950 text-lg mt-1">Remaining: Rs. {loan.RemainingBalance.toLocaleString()}</p>
+                                        {activeLoans.map(loan => {
+                                            // Calculate Progress Bar Width
+                                            const progress = loan.TotalAmount ? ((loan.TotalAmount - loan.RemainingBalance) / loan.TotalAmount) * 100 : 0;
+
+                                            return (
+                                                <div key={loan.LoanID} className="border border-slate-200 rounded-xl p-5 hover:border-emerald-200 transition-colors bg-[#f8fafc] relative overflow-hidden">
+                                                    {/* Accent Top Border */}
+                                                    <div className="absolute top-0 left-0 w-full h-1 bg-amber-500"></div>
+                                                    
+                                                    <div className="flex justify-between items-start mb-4 pt-1">
+                                                        <div>
+                                                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Loan ID: {loan.LoanID}</p>
+                                                            <p className="font-bold text-indigo-950 text-lg mt-1">Remaining: Rs. {parseFloat(loan.RemainingBalance).toLocaleString()}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Active</p>
+                                                        </div>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Active</p>
+
+                                                    {/* ---> UPDATED: PROGRESS BAR <--- */}
+                                                    <div className="mb-5 bg-white p-3 rounded-lg border border-slate-100">
+                                                        <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400 mb-1.5">
+                                                            <span>Paid: {progress.toFixed(0)}%</span>
+                                                            <span>Total: Rs. {parseFloat(loan.TotalAmount || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-200 rounded-full h-1.5">
+                                                            <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-200">
+                                                        <div>
+                                                            <p className="text-[10px] uppercase text-slate-400 font-bold">Monthly Installment</p>
+                                                            <p className="font-mono font-bold text-slate-700">Rs. {parseFloat(loan.MonthlyInstallment).toLocaleString()}</p>
+                                                            {loan.NextDueDate && (
+                                                                <p className="text-[10px] font-bold text-amber-600 mt-0.5 flex items-center gap-1">
+                                                                    <CalendarDays size={12}/> Due: {new Date(loan.NextDueDate).toLocaleDateString()}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        
+                                                        {/* ---> UPDATED: PAY INSTALLMENT BUTTON <--- */}
+                                                        <button 
+                                                            onClick={() => handleLoanPayment(loan)}
+                                                            disabled={processingId === loan.LoanID}
+                                                            className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
+                                                        >
+                                                            {processingId === loan.LoanID ? <><Loader2 className="animate-spin" size={14}/> Processing...</> : 'Pay Installment'}
+                                                        </button>
                                                     </div>
                                                 </div>
-                                                
-                                                <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-200">
-                                                    <div>
-                                                        <p className="text-[10px] uppercase text-slate-400 font-bold">Monthly Installment</p>
-                                                        <p className="font-mono font-bold text-slate-700">Rs. {loan.MonthlyInstallment.toLocaleString()}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[10px] uppercase text-slate-400 font-bold">Next Due Date</p>
-                                                        <p className="font-mono font-bold text-slate-700 flex items-center gap-1">
-                                                            <CalendarDays size={14}/> 
-                                                            {new Date(loan.NextDueDate).toLocaleDateString()}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-500">
@@ -158,7 +200,6 @@ const LoanManagement = () => {
                                 )}
                             </section>
 
-                            {/* APPLICATION HISTORY */}
                             <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60">
                                 <h3 className="font-serif text-xl text-indigo-950 font-bold mb-4 flex items-center gap-2">
                                     <FileText className="text-indigo-600" /> Application History
@@ -184,7 +225,6 @@ const LoanManagement = () => {
 
                         </div>
 
-                        {/* RIGHT COLUMN: APPLY FORM */}
                         <div className="col-span-12 lg:col-span-5">
                             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60 sticky top-8">
                                 <h3 className="font-serif text-xl text-indigo-950 font-bold mb-6">Request Financing</h3>
@@ -228,7 +268,6 @@ const LoanManagement = () => {
                                             <div className="text-right mt-1 font-bold text-indigo-900">{formData.repaymentDuration} Months</div>
                                         </div>
 
-                                        {/* SMART CALCULATOR PREVIEW */}
                                         <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-100 mt-6">
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="text-xs font-bold text-slate-500">Interest Rate (Flat)</span>

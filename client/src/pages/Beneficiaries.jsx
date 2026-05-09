@@ -74,7 +74,7 @@ const Beneficiaries = () => {
             await axios.delete(`http://localhost:5000/api/customer/beneficiaries/${beneficiaryId}`, { 
                 headers: { Authorization: `Bearer ${token}` }
             });
-            fetchData(); // Refresh the list
+            fetchData(); 
         } catch (err) {
             alert('Failed to remove contact.');
         }

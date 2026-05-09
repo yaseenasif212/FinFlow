@@ -10,10 +10,9 @@ const verifyToken = (req, res, next) => {
     }
 
     try {
-        // Strip the "Bearer " part from the token string
         const verified = jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET || 'fallback_secret');
-        req.user = verified; // Attach the decoded user payload to the request
-        next(); // Move to the actual controller
+        req.user = verified; 
+        next(); 
     } catch (err) {
         res.status(400).json({ success: false, message: 'Invalid Token.' });
     }
@@ -21,9 +20,8 @@ const verifyToken = (req, res, next) => {
 
 // Middleware 2: Verify they are specifically an ADMIN
 const verifyAdmin = (req, res, next) => {
-    // This runs AFTER verifyToken, so req.user already exists
     if (req.user && req.user.role === 'Admin') {
-        next(); // They are an Admin, let them through!
+        next(); 
     } else {
         res.status(403).json({ success: false, message: 'Access Denied. Admin privileges required.' });
     }

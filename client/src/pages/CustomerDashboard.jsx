@@ -1,18 +1,17 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { 
     ShieldCheck, TrendingUp, ArrowUpRight, ArrowDownLeft, 
-    CheckCircle2, AlertCircle, Send, Lock, Download
+    CheckCircle2, AlertCircle, Send, Lock, Download, Users, Divide, ArrowRight
 } from 'lucide-react';
-
-// 1. IMPORT YOUR NEW SIDEBAR COMPONENT
 import Sidebar from '../components/Sidebar'; 
 
 const CustomerDashboard = () => {
     const [accounts, setAccounts] = useState([]);
     const [selectedAccount, setSelectedAccount] = useState(null);
     const [transactions, setTransactions] = useState([]);
+    const [beneficiaries, setBeneficiaries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     
@@ -23,6 +22,12 @@ const CustomerDashboard = () => {
     
     const [isTransferring, setIsTransferring] = useState(false);
     const [transferStatus, setTransferStatus] = useState({ type: '', message: '' });
+
+    // Split Bill States
+    const [showSplitModal, setShowSplitModal] = useState(false);
+    const [splitBillTotal, setSplitBillTotal] = useState('');
+    const [selectedFriends, setSelectedFriends] = useState([]);
+    const [isSplitting, setIsSplitting] = useState(false);
 
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('finflow_user') || '{}');
@@ -41,8 +46,16 @@ const CustomerDashboard = () => {
                 setAccounts(fetchedAccounts);
                 
                 const primaryAccount = fetchedAccounts[0];
-                setSelectedAccount(prev => prev ? (fetchedAccounts.find(a => a.AccountNumber === prev.AccountNumber) || primaryAccount) : primaryAccount);
+                const activeAcc = prev => prev ? (fetchedAccounts.find(a => a.AccountNumber === prev.AccountNumber) || primaryAccount) : primaryAccount;
+                setSelectedAccount(activeAcc);
                 setTransactions(res.data.transactions);
+
+                if (primaryAccount) {
+                    const benRes = await axios.get(`http://localhost:5000/api/customer/beneficiaries/${primaryAccount.AccountNumber}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (benRes.data.success) setBeneficiaries(benRes.data.beneficiaries);
+                }
             }
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to load dashboard.');
@@ -105,9 +118,43 @@ const CustomerDashboard = () => {
         }
     };
 
+    const handleSplitBillSubmit = async (e) => {
+        e.preventDefault();
+        if (selectedFriends.length === 0 || !splitBillTotal) return alert("Select at least one friend and enter an amount.");
+        
+        setIsSplitting(true);
+        try {
+            const token = localStorage.getItem('finflow_token');
+            const res = await axios.post('http://localhost:5000/api/customer/transfer/split', {
+                payerAccount: selectedAccount.AccountNumber,
+                totalAmount: parseFloat(splitBillTotal),
+                participants: selectedFriends
+            }, { headers: { Authorization: `Bearer ${token}` } });
+    
+            if (res.data.success) {
+                alert(res.data.message);
+                setShowSplitModal(false);
+                setSplitBillTotal('');
+                setSelectedFriends([]);
+                fetchDashboardData(); 
+            }
+        } catch (err) {
+            alert('Failed to split bill. Ensure all friends have sufficient balance.');
+        } finally {
+            setIsSplitting(false);
+        }
+    };
+
+    const toggleFriendSelection = (accNum) => {
+        if (selectedFriends.includes(accNum)) {
+            setSelectedFriends(selectedFriends.filter(f => f !== accNum));
+        } else {
+            setSelectedFriends([...selectedFriends, accNum]);
+        }
+    };
+
     const handleDownloadStatement = async () => {
         if (!selectedAccount) return;
-        
         try {
             const token = localStorage.getItem('finflow_token');
             const response = await axios.get(`http://localhost:5000/api/customer/statement/${selectedAccount.AccountNumber}`, {
@@ -123,7 +170,6 @@ const CustomerDashboard = () => {
             link.click();
             link.remove(); 
         } catch (err) {
-            console.error("Failed to download statement", err);
             alert("Error downloading statement.");
         }
     };
@@ -134,14 +180,9 @@ const CustomerDashboard = () => {
     
     return (
         <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen">
-            
-            {/* 2. INJECT THE REUSABLE SIDEBAR HERE */}
             <Sidebar />
 
-            {/* MAIN CONTENT AREA */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-                
-                {/* TOP NAVBAR */}
                 <header className="w-full h-20 sticky top-0 z-40 bg-white/60 backdrop-blur-xl border-b border-slate-200/60 flex justify-end items-center px-8">
                     <div className="flex items-center gap-4">
                         <div className="h-6 w-px bg-slate-300 mx-2"></div>
@@ -149,10 +190,7 @@ const CustomerDashboard = () => {
                     </div>
                 </header>
 
-                {/* SCROLLABLE CANVAS */}
                 <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                    
-                    {/* HERO HEADER */}
                     <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">
                         <div>
                             <h2 className="font-serif text-4xl md:text-5xl text-indigo-950 font-bold tracking-tight">Good Morning, {user.name?.split(' ')[0]}</h2>
@@ -164,13 +202,11 @@ const CustomerDashboard = () => {
                         </div>
                     </section>
 
-                    {/* NEW RESTRUCTURED BENTO GRID */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         
-                        {/* LEFT COLUMN: ACCOUNTS & LEDGER HISTORY (8 Cols wide on Desktop) */}
+                        {/* LEFT COLUMN: ACCOUNTS & LEDGER */}
                         <div className="col-span-12 lg:col-span-8 space-y-8">
                             
-                            {/* ACCOUNTS */}
                             <section>
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="font-serif text-2xl text-indigo-950 font-bold">Your Accounts</h3>
@@ -220,12 +256,9 @@ const CustomerDashboard = () => {
                                 </div>
                             </section>
 
-                            {/* LEDGER HISTORY */}
                             <section>
                                 <div className="flex items-center justify-between mb-4 mt-1">
                                     <h3 className="font-serif text-2xl text-indigo-950 font-bold">Ledger History</h3>
-
-                                    {/* DOWNLOAD BUTTON */}
                                     <button 
                                         onClick={handleDownloadStatement}
                                         className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
@@ -266,20 +299,98 @@ const CustomerDashboard = () => {
                             
                         </div>
 
-                        {/* RIGHT COLUMN: SECURE TRANSFER HUB (4 Cols wide on Desktop) */}
+                        {/* RIGHT COLUMN: SECURE TRANSFER HUB & CONTACTS */}
                         <aside className="col-span-12 lg:col-span-4 space-y-8">
-                            
-                            {/* SECURE TRANSFER HUB */}
                             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60">
                                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
                                     <h4 className="font-serif text-xl text-indigo-950 font-bold">Secure Transfer</h4>
                                     <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 bg-slate-100 px-2 py-1 rounded">Quick Action</span>
                                 </div>
 
+                                {/* ---> QUICK CONTACTS (BENEFICIARIES) UI <--- */}
+                                <div className="mb-6">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Quick Contacts</label>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => setShowSplitModal(!showSplitModal)} 
+                                                className={`text-xs px-3 py-1 rounded-full font-bold transition flex items-center gap-1 ${showSplitModal ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                            >
+                                                <Divide size={12}/> Split
+                                            </button>
+                                            
+                                            <Link to="/contacts" className="text-xs px-3 py-1 rounded-full font-bold transition flex items-center gap-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
+                                                Manage <ArrowRight size={12}/>
+                                            </Link>
+                                        </div>
+                                    </div>
+
+                                    {/* SPLIT BILL MODAL/INTERFACE */}
+                                    {showSplitModal && (
+                                        <form onSubmit={handleSplitBillSubmit} className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6 shadow-inner">
+                                            <h5 className="text-sm font-bold text-indigo-950 mb-3 flex items-center gap-2">
+                                                <Divide size={16} className="text-indigo-600"/> Smart Bill Splitter
+                                            </h5>
+                                            
+                                            <input 
+                                                type="number" placeholder="Total Bill Amount (Rs.)" required min="100"
+                                                value={splitBillTotal} onChange={e => setSplitBillTotal(e.target.value)} 
+                                                className="w-full text-sm p-3 rounded-lg border border-slate-200 outline-none focus:border-indigo-500 font-bold mb-3" 
+                                            />
+
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Select Friends to split with:</p>
+                                            <div className="flex flex-wrap gap-2 mb-4">
+                                                {beneficiaries.map(ben => (
+                                                    <div 
+                                                        key={ben.BeneficiaryID}
+                                                        onClick={() => toggleFriendSelection(ben.BeneficiaryAccountNumber)}
+                                                        className={`cursor-pointer px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                                                            selectedFriends.includes(ben.BeneficiaryAccountNumber) 
+                                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
+                                                            : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                                                        }`}
+                                                    >
+                                                        {ben.Nickname}
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {splitBillTotal && selectedFriends.length > 0 && (
+                                                <div className="bg-white p-3 rounded-lg border border-indigo-100 flex justify-between items-center mb-4">
+                                                    <span className="text-xs font-bold text-slate-500">Each Person Pays:</span>
+                                                    <span className="text-lg font-bold text-indigo-700">
+                                                        Rs. {Math.round(splitBillTotal / (selectedFriends.length + 1)).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            <button type="submit" disabled={isSplitting || selectedFriends.length === 0} className="w-full bg-indigo-950 text-white text-sm font-bold py-3 rounded-lg hover:bg-indigo-900 disabled:opacity-50 transition-all">
+                                                {isSplitting ? 'Processing Batch...' : 'Execute Split Transaction'}
+                                            </button>
+                                        </form>
+                                    )}
+
+                                    <div className="flex gap-3 overflow-x-auto pb-2 hide-scrollbar">
+                                        {beneficiaries.length > 0 ? beneficiaries.map(ben => (
+                                            <div 
+                                                key={ben.BeneficiaryID} 
+                                                onClick={() => setTransferData({ ...transferData, receiverAccount: ben.BeneficiaryAccountNumber })}
+                                                className={`flex flex-col items-center gap-1 cursor-pointer group min-w-[60px] ${transferData.receiverAccount === ben.BeneficiaryAccountNumber ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
+                                            >
+                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all ${transferData.receiverAccount === ben.BeneficiaryAccountNumber ? 'bg-emerald-500 text-white shadow-md ring-2 ring-emerald-500 ring-offset-2' : 'bg-indigo-50 text-indigo-900 group-hover:bg-indigo-100'}`}>
+                                                    {ben.Nickname.charAt(0).toUpperCase()}
+                                                </div>
+                                                <p className="text-[10px] font-bold text-slate-600 truncate w-full text-center">{ben.Nickname}</p>
+                                            </div>
+                                        )) : (
+                                            <div className="text-xs text-slate-400 italic">No contacts saved yet.</div>
+                                        )}
+                                    </div>
+                                </div>
+                                {/* --------------------------------------- */}
+
                                 {transferStatus.message && (
-                                    <div className={`p-3 rounded-lg text-xs font-bold flex items-center gap-2 mb-6 ${
-                                        transferStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
-                                    }`}>
+                                    <div className={`p-3 rounded-lg text-xs font-bold flex items-center gap-2 mb-6 ${transferStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
                                         {transferStatus.type === 'success' ? <CheckCircle2 size={16}/> : <AlertCircle size={16}/>}
                                         {transferStatus.message}
                                     </div>
@@ -292,7 +403,7 @@ const CustomerDashboard = () => {
                                             type="text" name="receiverAccount" required
                                             value={transferData.receiverAccount} onChange={handleTransferChange}
                                             placeholder="PK-FIN-XXXX" 
-                                            className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg py-3 px-4 text-sm font-mono font-bold outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all uppercase" 
+                                            className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg py-3 px-4 text-sm font-mono font-bold outline-none focus:border-emerald-500 transition-all uppercase" 
                                         />
                                     </div>
 
@@ -302,7 +413,7 @@ const CustomerDashboard = () => {
                                             type="number" name="amount" min="1" required
                                             value={transferData.amount} onChange={handleTransferChange}
                                             placeholder="0.00" 
-                                            className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg py-3 px-4 text-lg font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all" 
+                                            className="w-full bg-[#f8fafc] border border-slate-200 rounded-lg py-3 px-4 text-lg font-bold text-slate-900 outline-none focus:border-emerald-500 transition-all" 
                                         />
                                     </div>
 
@@ -316,14 +427,13 @@ const CustomerDashboard = () => {
                                                 <input
                                                     key={index} ref={pinRefs[index]} type="password" maxLength="1"
                                                     value={pin[index]} onChange={(e) => handlePinChange(index, e.target.value)} onKeyDown={(e) => handlePinKeyDown(index, e)}
-                                                    placeholder="•"
-                                                    className="w-full h-12 bg-white border border-slate-200 rounded-lg text-center text-xl font-bold text-indigo-950 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-sm"
+                                                    className="w-full h-12 bg-white border border-slate-200 rounded-lg text-center text-xl font-bold text-indigo-950 outline-none focus:border-emerald-500 shadow-sm"
                                                 />
                                             ))}
                                         </div>
                                     </div>
 
-                                    <button type="submit" disabled={isTransferring} className="w-full mt-2 py-3.5 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-white text-sm font-bold shadow-lg disabled:opacity-70 transition-all flex justify-center items-center gap-2">
+                                    <button type="submit" disabled={isTransferring} className="w-full mt-2 py-3.5 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-white text-sm font-bold shadow-lg transition-all flex justify-center items-center gap-2">
                                         {isTransferring ? 'Authorizing...' : <><Send size={16} /> Execute Transfer</>}
                                     </button>
                                 </form>

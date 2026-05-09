@@ -1,5 +1,6 @@
 const { sql } = require('../config/db');
 const PDFDocument = require('pdfkit');
+
 // 1. Fetch Dashboard Data
 const getDashboardData = async (req, res) => {
     try {
@@ -46,7 +47,6 @@ const transferMoney = async (req, res) => {
     try {
         const pool = await sql.connect();
 
-        // Verify Sender
         const senderCheck = await pool.request()
             .input('SenderAccount', sql.VarChar, senderAccount)
             .input('UserID', sql.VarChar, userId)
@@ -57,7 +57,6 @@ const transferMoney = async (req, res) => {
         if (senderCheck.recordset[0].TransactionPin !== pin) return res.status(401).json({ success: false, message: 'Incorrect 4-Digit PIN.' });
         if (senderCheck.recordset[0].Balance < amount) return res.status(400).json({ success: false, message: 'Insufficient balance.' });
 
-        // Verify Receiver
         const receiverCheck = await pool.request()
             .input('ReceiverAccount', sql.VarChar, receiverAccount)
             .query(`SELECT AccountStatus FROM Accounts WHERE AccountNumber = @ReceiverAccount`);
@@ -65,7 +64,6 @@ const transferMoney = async (req, res) => {
         if (receiverCheck.recordset.length === 0) return res.status(404).json({ success: false, message: 'Recipient account does not exist.' });
         if (receiverCheck.recordset[0].AccountStatus !== 'Active') return res.status(403).json({ success: false, message: 'Recipient account is frozen.' });
 
-        // The Transaction
         const txId = `TRX-${Math.floor(10000000 + Math.random() * 90000000)}`;
         const logId = `LOG-${Date.now().toString().slice(-10)}`;
 
@@ -110,7 +108,6 @@ const depositMoney = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // Ensure the account belongs to the user
         const accCheck = await pool.request()
             .input('AccountNumber', sql.VarChar, accountNumber)
             .input('UserID', sql.VarChar, userId)
@@ -234,7 +231,6 @@ const getSpendingAnalytics = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // 1. Outgoing Breakdown (For the Pie/Bar Chart)
         const spendingResult = await pool.request()
             .input('AccountNumber', sql.VarChar, accountNumber)
             .query(`
@@ -244,7 +240,6 @@ const getSpendingAnalytics = async (req, res) => {
                 GROUP BY TransactionType
             `);
 
-        // 2. Cash Flow (Money In vs Money Out)
         const cashFlowResult = await pool.request()
             .input('AccountNumber', sql.VarChar, accountNumber)
             .query(`
@@ -255,57 +250,46 @@ const getSpendingAnalytics = async (req, res) => {
                 WHERE ReceiverAccount = @AccountNumber OR SenderAccount = @AccountNumber
             `);
 
-        // 3. CREDIT SCORE ALGORITHM: Fetch raw data needed for calculation
         const scoreDataResult = await pool.request()
             .input('AccountNumber', sql.VarChar, accountNumber)
             .query(`
-                -- Get Current Balance
                 SELECT Balance FROM dbo.Accounts WHERE AccountNumber = @AccountNumber;
                 
-                -- Get Transaction Count
                 SELECT COUNT(*) AS TxCount FROM dbo.Transactions 
                 WHERE SenderAccount = @AccountNumber OR ReceiverAccount = @AccountNumber;
                 
-                -- Get Virtual Card Limit (Removed the missing AvailableCredit column to fix crash)
                 SELECT ISNULL(SUM(CreditLimit), 0) AS TotalLimit
                 FROM dbo.ActiveCreditCards WHERE AccountNumber = @AccountNumber;
             `);
 
-        // Extract the data from the 3 queries above
         const balance = scoreDataResult.recordsets[0][0]?.Balance || 0;
         const txCount = scoreDataResult.recordsets[1][0]?.TxCount || 0;
         const totalLimit = scoreDataResult.recordsets[2][0]?.TotalLimit || 0;
         
-        // Temporarily defaulting spent to 0 to prevent crashes
         const totalSpent = 0; 
 
-        // --- CALCULATE THE SCORE ---
-        let calculatedScore = 600; // Base starting score
+        let calculatedScore = 600; 
 
-        // Factor A: Liquidity (Max +50)
         if (balance >= 50000) calculatedScore += 50;
         else if (balance >= 20000) calculatedScore += 30;
         else if (balance >= 5000) calculatedScore += 15;
 
-        // Factor B: Transaction History (+2 per tx, max +100 points)
         calculatedScore += Math.min(txCount * 2, 100);
 
-        // Factor C: Credit Utilization
         if (totalLimit > 0) {
             const utilizationRatio = totalSpent / totalLimit;
             
             if (utilizationRatio <= 0.30) {
-                calculatedScore += 50;  // Excellent credit management
+                calculatedScore += 50;  
             } else if (utilizationRatio <= 0.70) {
-                calculatedScore += 20;  // Average management
+                calculatedScore += 20;  
             } else if (utilizationRatio > 0.90) {
-                calculatedScore -= 30;  // High risk, maxing out limits
+                calculatedScore -= 30;  
             }
         } else {
-            calculatedScore += 20; // Neutral bonus for having zero debt
+            calculatedScore += 20; 
         }
 
-        // Ensure score stays within the realistic 300 - 850 range
         calculatedScore = Math.max(300, Math.min(calculatedScore, 850));
 
         res.status(200).json({ 
@@ -331,7 +315,6 @@ const downloadStatement = async (req, res) => {
     try {
         const pool = await sql.connect();
 
-        // 1. Fetch Account & User details
         const accResult = await pool.request()
             .input('AccountNumber', sql.VarChar, accountNumber)
             .query(`
@@ -346,7 +329,6 @@ const downloadStatement = async (req, res) => {
         }
         const accountInfo = accResult.recordset[0];
 
-        // 2. Fetch Transaction History (FIXED: Asking for TransactionDate instead of FormattedDate)
         const txResult = await pool.request()
             .input('AccountNumber', sql.VarChar, accountNumber)
             .query(`
@@ -357,24 +339,18 @@ const downloadStatement = async (req, res) => {
             `);
         const transactions = txResult.recordset;
 
-        // 3. Initialize PDF Document
         const PDFDocument = require('pdfkit');
         const doc = new PDFDocument({ margin: 50 });
 
-        // Set response headers so the browser knows it's a downloadable PDF file
         res.setHeader('Content-disposition', `attachment; filename=FinFlow_Statement_${accountNumber}.pdf`);
         res.setHeader('Content-type', 'application/pdf');
 
-        // Pipe the PDF directly to the HTTP response
         doc.pipe(res);
 
-        // --- DRAW THE PDF ---
-        // Header
         doc.fontSize(24).font('Times-BoldItalic').text('FinFlow.', { align: 'right' });
         doc.fontSize(10).font('Helvetica').fillColor('gray').text('Official Account Statement', { align: 'right' });
         doc.moveDown(2);
 
-        // Customer Info
         doc.fillColor('black').fontSize(14).font('Helvetica-Bold').text('Account Details');
         doc.fontSize(10).font('Helvetica').text(`Customer Name: ${accountInfo.Name}`);
         doc.text(`Email: ${accountInfo.Email}`);
@@ -382,17 +358,14 @@ const downloadStatement = async (req, res) => {
         doc.text(`Statement Date: ${new Date().toLocaleDateString()}`);
         doc.moveDown();
         
-        // Balance Summary
         doc.fontSize(14).font('Helvetica-Bold').text('Financial Summary');
         doc.fontSize(12).font('Helvetica').text(`Closing Balance: Rs. ${accountInfo.Balance.toLocaleString()}`);
         doc.moveDown(2);
 
-        // Transaction Table Header
         doc.fontSize(12).font('Helvetica-Bold').text('Recent Transactions');
-        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke(); // Draw a line
+        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke(); 
         doc.moveDown(0.5);
 
-        // Print Transactions
         doc.font('Helvetica').fontSize(10);
         if (transactions.length === 0) {
             doc.text('No transactions found for this account.', { align: 'center' });
@@ -402,30 +375,25 @@ const downloadStatement = async (req, res) => {
                 const sign = isMoneyOut ? '-' : '+';
                 const counterparty = isMoneyOut ? `To: ${tx.ReceiverAccount}` : `From: ${tx.SenderAccount}`;
                 
-                // NEW: Use JavaScript to safely format the SQL Date
                 const displayDate = new Date(tx.TransactionDate).toLocaleDateString();
                 
-                // Keep it on one line using specific X coordinates
                 const y = doc.y;
                 doc.text(displayDate, 50, y);
                 doc.text(counterparty, 150, y);
                 doc.text(tx.TransactionType || 'Transfer', 350, y);
                 
-                // Color code the amounts
                 doc.fillColor(isMoneyOut ? 'red' : 'green');
                 doc.text(`${sign} Rs.${tx.Amount}`, 450, y, { align: 'right' });
                 
-                doc.fillColor('black'); // Reset color
+                doc.fillColor('black'); 
                 doc.moveDown(0.5);
             });
         }
 
-        // Footer
         doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
         doc.moveDown();
         doc.fontSize(8).fillColor('gray').text('This is a system-generated document. FinFlow Digital Vault securely protects your assets.', { align: 'center' });
 
-        // Finalize the PDF and end the stream
         doc.end();
 
     } catch (err) {
@@ -436,7 +404,6 @@ const downloadStatement = async (req, res) => {
     }
 };
 
-// Add these to your existing customerController.js
 const applyForLoan = async (req, res) => {
     const { accountNumber, loanType, amount, repaymentDuration } = req.body;
     const loanId = `LN-${Date.now().toString().slice(-10)}`; 
@@ -505,7 +472,6 @@ const addBeneficiary = async (req, res) => {
     try {
         const pool = await sql.connect();
         
-        // Optional but recommended: Check if the target account actually exists first!
         const checkAcc = await pool.request()
             .input('AccountNumber', sql.VarChar(20), beneficiaryAccount)
             .query(`SELECT * FROM dbo.Accounts WHERE AccountNumber = @AccountNumber`);
@@ -545,8 +511,138 @@ const removeBeneficiary = async (req, res) => {
     }
 };
 
+// ==========================================
+// CUSTOMER: Smart Bill Splitter
+// ==========================================
+const splitBill = async (req, res) => {
+    const { payerAccount, totalAmount, participants } = req.body;
+    
+    const numberOfPeople = participants.length + 1;
+    const splitAmount = parseFloat((totalAmount / numberOfPeople).toFixed(2));
+
+    try {
+        const pool = await sql.connect();
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+
+        try {
+            for (const friendAcc of participants) {
+                
+                await transaction.request()
+                    .input('FriendAcc', sql.VarChar(20), friendAcc)
+                    .input('Amount', sql.Decimal(15,2), splitAmount)
+                    .query(`UPDATE dbo.Accounts SET Balance = Balance - @Amount WHERE AccountNumber = @FriendAcc`);
+
+                await transaction.request()
+                    .input('PayerAcc', sql.VarChar(20), payerAccount)
+                    .input('Amount', sql.Decimal(15,2), splitAmount)
+                    .query(`UPDATE dbo.Accounts SET Balance = Balance + @Amount WHERE AccountNumber = @PayerAcc`);
+
+                const uniqueTrxId = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+
+                await transaction.request()
+                    .input('TransactionID', sql.VarChar(50), uniqueTrxId)
+                    .input('FriendAcc', sql.VarChar(20), friendAcc)
+                    .input('PayerAcc', sql.VarChar(20), payerAccount)
+                    .input('Amount', sql.Decimal(15,2), splitAmount)
+                    .query(`
+                        INSERT INTO dbo.Transactions 
+                        (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime)
+                        VALUES 
+                        (@TransactionID, @FriendAcc, @PayerAcc, @Amount, 'Split Bill Settlement', GETDATE(), CONVERT(time, GETDATE()))
+                    `);
+            }
+            
+            await transaction.commit();
+            res.status(200).json({ 
+                success: true, 
+                message: `Bill split! Collected Rs. ${splitAmount} from each friend.`,
+                splitAmount: splitAmount
+            });
+
+        } catch (txError) {
+            await transaction.rollback();
+            throw txError; 
+        }
+    } catch (err) {
+        console.error('Split Bill Error:', err);
+        res.status(500).json({ success: false, message: 'Failed to process batch split. Funds rolled back.' });
+    }
+};
 
 
 
 
-module.exports = { getDashboardData, transferMoney, depositMoney, withdrawMoney, updatePin,getSpendingAnalytics ,downloadStatement,applyForLoan, getCustomerLoans,getBeneficiaries, addBeneficiary, removeBeneficiary  };
+const getActiveLoans = async (req, res) => {
+    const { accountNumber } = req.params;
+    try {
+        const pool = await sql.connect();
+        const result = await pool.request()
+            .input('AccNum', sql.VarChar(20), accountNumber)
+            .query(`SELECT * FROM dbo.ActiveLoans WHERE AccountNumber = @AccNum AND RemainingBalance > 0`);
+            
+        res.status(200).json({ success: true, loans: result.recordset });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Failed to fetch loans.' });
+    }
+};
+
+
+const payLoanInstallment = async (req, res) => {
+    const { accountNumber, loanId, paymentAmount } = req.body;
+
+    try {
+        const pool = await sql.connect();
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+
+        try {
+          
+            await transaction.request()
+                .input('AccNum', sql.VarChar(20), accountNumber)
+                .input('Amount', sql.Decimal(15,2), paymentAmount)
+                .query(`UPDATE dbo.Accounts SET Balance = Balance - @Amount WHERE AccountNumber = @AccNum`);
+
+            
+            await transaction.request()
+                .input('LoanID', sql.VarChar(20), loanId) 
+                .input('Amount', sql.Decimal(15,2), paymentAmount)
+                .query(`UPDATE dbo.ActiveLoans SET RemainingBalance = RemainingBalance - @Amount WHERE LoanID = @LoanID`);
+
+           
+            
+            const receiptId = `REP-${Date.now().toString().slice(-8)}`;
+            await transaction.request()
+                .input('RepaymentID', sql.VarChar(20), receiptId)
+                .input('LoanID', sql.VarChar(20), loanId)
+                .input('Amount', sql.Decimal(15,2), paymentAmount)
+                .query(`
+                    INSERT INTO dbo.LoanRepayments (RepaymentID, LoanID, AmountPaid, PaymentDate, PaymentStatus)
+                    VALUES (@RepaymentID, @LoanID, @Amount, GETDATE(), 'On-Time')
+                `);
+           
+            const uniqueTrxId = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 100)}`;
+            await transaction.request()
+                .input('TransactionID', sql.VarChar(50), uniqueTrxId)
+                .input('Sender', sql.VarChar(20), accountNumber)
+                .input('Amount', sql.Decimal(15,2), paymentAmount)
+               .query(`INSERT INTO dbo.Transactions (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime)
+        VALUES (@TransactionID, @Sender, 'PK-FIN-1002', @Amount, 'Loan Installment Payment', GETDATE(), CONVERT(time, GETDATE()))`);
+
+            await transaction.commit();
+            res.status(200).json({ success: true, message: `Installment of Rs. ${paymentAmount} paid successfully!` });
+
+        } catch (txError) {
+            await transaction.rollback();
+            throw txError;
+        }
+    } catch (err) {
+        console.error('Loan Repayment Error:', err);
+        res.status(500).json({ success: false, message: 'Failed to process payment.' });
+    }
+};
+
+
+
+module.exports = { getDashboardData, transferMoney, depositMoney, withdrawMoney, updatePin, getSpendingAnalytics, downloadStatement, applyForLoan, getCustomerLoans, getBeneficiaries, addBeneficiary, removeBeneficiary, splitBill,getActiveLoans, payLoanInstallment  };

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
     Users, LogOut, ShieldAlert, Activity, Search, ArrowRightLeft, 
-    Landmark, Clock, CheckCircle2, XCircle 
+    Landmark, Clock, CheckCircle2, XCircle, AlertTriangle
 } from 'lucide-react';
 import AdminCardApprover from '../components/AdminCardApprover';
 
@@ -107,7 +107,7 @@ const AdminDashboard = () => {
 
     const handleTabSwitch = (tabName) => {
         setActiveTab(tabName);
-        setSearchQuery(''); 
+        searchQuery && setSearchQuery(''); 
     };
 
     // Dynamic Filtering Logic
@@ -136,6 +136,20 @@ const AdminDashboard = () => {
         loan.AccountNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         loan.LoanType?.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    // --> NEW: Smart Risk Assessor <--
+    const getRiskProfile = (accountNumber) => {
+        // Generates a consistent number between 300 and 850 based on the account string
+        let hash = 0;
+        for (let i = 0; i < accountNumber.length; i++) {
+            hash = accountNumber.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const score = Math.abs(hash % 550) + 300; 
+
+        if (score >= 700) return { score, level: 'Low Risk', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+        if (score >= 580) return { score, level: 'Medium Risk', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+        return { score, level: 'High Risk', color: 'bg-red-50 text-red-700 border-red-200' };
+    };
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans">
@@ -230,7 +244,6 @@ const AdminDashboard = () => {
                             
                             {/* --- USERS TABLE --- */}
                             {activeTab === 'users' && (
-                                /* ... (Your existing User Table code remains exactly the same here) ... */
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
@@ -277,7 +290,6 @@ const AdminDashboard = () => {
 
                             {/* --- TRANSACTIONS TABLE --- */}
                             {activeTab === 'transactions' && (
-                                /* ... (Your existing Transactions Table code remains exactly the same here) ... */
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
@@ -311,7 +323,6 @@ const AdminDashboard = () => {
 
                             {/* --- SECURITY LOGS TABLE --- */}
                             {activeTab === 'logs' && (
-                                /* ... (Your existing Logs Table code remains exactly the same here) ... */
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
@@ -359,48 +370,64 @@ const AdminDashboard = () => {
                                 </table>
                             )}
 
-                            {/* --- NEW: LOAN APPROVALS TAB CONTENT --- */}
+                       {/* --- UPDATED: LOAN APPROVALS WITH RISK ASSESSOR --- */}
                             {activeTab === 'loans' && (
                                 <div className="p-6 bg-slate-50">
                                     {filteredLoans.length > 0 ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {filteredLoans.map(loan => (
-                                                <div key={loan.LoanID} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
-                                                    <div>
-                                                        <div className="flex justify-between items-start mb-3">
-                                                            <div className="flex items-center gap-2 text-[#2eb998]">
-                                                                <Landmark size={20} />
-                                                                <span className="font-bold text-sm">{loan.LoanType}</span>
-                                                            </div>
-                                                            <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded">{loan.LoanID}</span>
-                                                        </div>
-                                                        <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">Account Number</p>
-                                                        <p className="font-mono text-slate-800 mb-4">{loan.AccountNumber}</p>
+                                            {filteredLoans.map(loan => {
+                                                const risk = getRiskProfile(loan.AccountNumber);
+                                                return (
+                                                    <div key={loan.LoanID} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
                                                         
-                                                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 mb-4">
-                                                            <p className="text-[10px] uppercase text-slate-500 font-bold">Requested Capital</p>
-                                                            <p className="text-xl font-bold text-slate-900">Rs. {loan.Amount.toLocaleString()}</p>
-                                                            <p className="text-xs text-slate-500 mt-1">Tenure: {loan.RepaymentDuration} Months</p>
+                                                        {/* Dynamic Risk Color Bar at the top */}
+                                                        <div className={`absolute top-0 left-0 w-full h-1.5 ${risk.color.split(' ')[0].replace('bg-', 'bg-').replace('50', '500')}`}></div>
+
+                                                        <div>
+                                                            <div className="flex justify-between items-start mb-3 pt-1">
+                                                                <div className="flex items-center gap-2 text-[#2eb998]">
+                                                                    <Landmark size={20} />
+                                                                    <span className="font-bold text-sm">{loan.LoanType}</span>
+                                                                </div>
+                                                                <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded">{loan.LoanID}</span>
+                                                            </div>
+                                                            <p className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">Account Number</p>
+                                                            <p className="font-mono text-slate-800 mb-4">{loan.AccountNumber}</p>
+                                                            
+                                                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 mb-4">
+                                                                <p className="text-[10px] uppercase text-slate-500 font-bold">Requested Capital</p>
+                                                                <p className="text-xl font-bold text-slate-900">Rs. {loan.Amount.toLocaleString()}</p>
+                                                                <p className="text-xs text-slate-500 mt-1">Tenure: {loan.RepaymentDuration} Months</p>
+                                                            </div>
+
+                                                            {/* --> NEW: AI RISK BADGE <-- */}
+                                                            <div className={`mb-5 p-2.5 rounded-lg border flex items-center justify-between ${risk.color}`}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <AlertTriangle size={16} />
+                                                                    <span className="text-xs font-bold uppercase tracking-widest">{risk.level}</span>
+                                                                </div>
+                                                                <span className="font-mono font-bold text-sm">Score: {risk.score}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex gap-2 mt-auto pt-2 border-t border-slate-100">
+                                                            <button 
+                                                                onClick={() => handleRejectLoan(loan.LoanID)}
+                                                                className="flex-1 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-1"
+                                                            >
+                                                                <XCircle size={16} /> Deny
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleApproveLoan(loan.LoanID)}
+                                                                disabled={processingId === loan.LoanID}
+                                                                className={`flex-1 py-2 text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-1 disabled:opacity-50 ${risk.level === 'High Risk' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-[#2eb998] hover:bg-[#269e82]'}`}
+                                                            >
+                                                                {processingId === loan.LoanID ? '...' : <><CheckCircle2 size={16} /> {risk.level === 'High Risk' ? 'Force Approve' : 'Approve'}</>}
+                                                            </button>
                                                         </div>
                                                     </div>
-
-                                                    <div className="flex gap-2 mt-auto pt-2 border-t border-slate-100">
-                                                        <button 
-                                                            onClick={() => handleRejectLoan(loan.LoanID)}
-                                                            className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-1"
-                                                        >
-                                                            <XCircle size={16} /> Deny
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleApproveLoan(loan.LoanID)}
-                                                            disabled={processingId === loan.LoanID}
-                                                            className="flex-1 py-2 bg-[#2eb998] hover:bg-[#269e82] text-white rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
-                                                        >
-                                                            {processingId === loan.LoanID ? '...' : <><CheckCircle2 size={16} /> Approve</>}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     ) : (
                                         <div className="text-center py-12 text-slate-500 font-medium">

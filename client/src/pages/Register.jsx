@@ -4,17 +4,16 @@ import axios from 'axios';
 import { AlertCircle, CheckCircle, ShieldCheck } from 'lucide-react';
 
 const Register = () => {
- const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState({
         name: '', cnic: '', email: '', password: '', 
         phone: '', address: '', transactionPin: '', 
-        accountType: 'Current' // <-- ADD THIS DEFAULT VALUE
+        accountType: 'Current'
     });
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
-    // SMART INPUT HANDLER
     const handleChange = (e) => {
         const { name, value } = e.target;
         let formattedValue = value;
@@ -30,7 +29,6 @@ const Register = () => {
             }
         } 
         else if (name === 'phone') {
-            // Auto-format phone to XXXX-XXXXXXX
             const rawDigits = value.replace(/\D/g, '');
             if (rawDigits.length <= 4) {
                 formattedValue = rawDigits;
@@ -51,12 +49,10 @@ const Register = () => {
         setSuccess('');
         setIsLoading(true);
 
-        // Strict Pre-Flight Checks
         if (formData.cnic.length !== 15) {
             setError('CNIC must be exactly 13 digits (formatted as XXXXX-XXXXXXX-X).');
             setIsLoading(false); return;
         }
-        // Phone length is now 12 because of the dash (e.g., 0300-1234567)
         if (formData.phone && formData.phone.length !== 12) {
             setError('Phone number must be exactly 11 digits (formatted as XXXX-XXXXXXX).');
             setIsLoading(false); return;
@@ -83,7 +79,6 @@ const Register = () => {
         <div className="min-h-screen bg-[#f3f4f6] flex items-center justify-center p-4 font-sans">
             <div className="max-w-[950px] w-full bg-white rounded-2xl shadow-xl flex flex-col md:flex-row overflow-hidden min-h-[600px]">
                 
-                {/* Left Side: Welcome Back Promo */}
                 <div className="w-full md:w-[40%] bg-gradient-to-br from-[#2eb998] to-[#259b7d] p-10 flex flex-col items-center justify-center text-center relative overflow-hidden order-2 md:order-1">
                     <div className="relative z-10 flex flex-col items-center w-full max-w-[260px]">
                         <h2 className="text-4xl font-extrabold text-white mb-5 tracking-tight">Welcome Back!</h2>
@@ -103,7 +98,6 @@ const Register = () => {
                     <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-white/10 rounded-full"></div>
                 </div>
 
-                {/* Right Side: Registration Form */}
                 <div className="w-full md:w-[60%] p-8 sm:p-12 flex flex-col relative order-1 md:order-2">
                     <div className="flex justify-end items-center gap-2 mb-4">
                         <span className="text-lg font-bold text-gray-700">FinFlow</span>
