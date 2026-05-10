@@ -1,7 +1,7 @@
 const { sql } = require('../config/db');
 const PDFDocument = require('pdfkit');
 
-// 1. Fetch Dashboard Data
+
 const getDashboardData = async (req, res) => {
     try {
         const pool = await sql.connect();
@@ -35,7 +35,6 @@ const getDashboardData = async (req, res) => {
     }
 };
 
-// 2. Peer-to-Peer Transfer Engine
 const transferMoney = async (req, res) => {
     const { senderAccount, receiverAccount, amount, pin } = req.body;
     const userId = req.user.id || req.user.UserID;
@@ -98,7 +97,6 @@ const transferMoney = async (req, res) => {
     }
 };
 
-// 3. ATM Deposit (Add Money)
 const depositMoney = async (req, res) => {
     const { accountNumber, amount } = req.body;
     const userId = req.user.id || req.user.UserID;
@@ -143,7 +141,7 @@ const depositMoney = async (req, res) => {
     }
 };
 
-// 4. ATM Withdraw (Take Money Out)
+
 const withdrawMoney = async (req, res) => {
     const { accountNumber, amount, pin } = req.body;
     const userId = req.user.id || req.user.UserID;
@@ -190,7 +188,7 @@ const withdrawMoney = async (req, res) => {
     }
 };
 
-// 5. Update Security PIN
+
 const updatePin = async (req, res) => {
     const { accountNumber, oldPin, newPin } = req.body;
     const userId = req.user.id || req.user.UserID;
@@ -222,9 +220,7 @@ const updatePin = async (req, res) => {
     }
 };
 
-// ==========================================
-// CUSTOMER: Get Spending Analytics & REAL Credit Score
-// ==========================================
+
 const getSpendingAnalytics = async (req, res) => {
     const { accountNumber } = req.params;
 
@@ -306,9 +302,6 @@ const getSpendingAnalytics = async (req, res) => {
     }
 };
 
-// ==========================================
-// CUSTOMER: Generate PDF Bank Statement
-// ==========================================
 const downloadStatement = async (req, res) => {
     const { accountNumber } = req.params;
 
@@ -447,9 +440,7 @@ const getCustomerLoans = async (req, res) => {
     }
 };
 
-// ==========================================
-// CUSTOMER: Beneficiaries (Quick Contacts)
-// ==========================================
+
 const getBeneficiaries = async (req, res) => {
     const { accountNumber } = req.params;
     try {
@@ -511,40 +502,38 @@ const removeBeneficiary = async (req, res) => {
     }
 };
 
-// ==========================================
-// CUSTOMER: Smart Bill Splitter (Upgraded to Request System)
-// ==========================================
 const splitBill = async (req, res) => {
     const { payerAccount, totalAmount, participants } = req.body;
     
-    // Calculate how much each friend owes
+
     const numberOfPeople = participants.length + 1;
     const splitAmount = parseFloat((totalAmount / numberOfPeople).toFixed(2));
 
     try {
         const pool = await sql.connect();
 
-        // 1. Get the Payer's Name to show in the notification bell
+       
         const userRes = await pool.request()
             .input('Acc', sql.VarChar(20), payerAccount)
             .query(`SELECT u.Name FROM dbo.Users u JOIN dbo.Accounts a ON u.UserID = a.UserID WHERE a.AccountNumber = @Acc`);
         
         const payerName = userRes.recordset[0] ? userRes.recordset[0].Name : 'A friend';
 
-        // 2. Create a transaction to batch insert all the requests safely
+       
+
         const transaction = new sql.Transaction(pool);
         await transaction.begin();
 
         try {
             for (const friendAcc of participants) {
-                // Generate a unique Request ID
+               
                 const reqId = `REQ-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
                 
                 await transaction.request()
                     .input('ReqID', sql.VarChar(50), reqId)
-                    .input('Type', sql.VarChar(20), 'SplitBill') // Tagging this as a Split Bill
-                    .input('Sender', sql.VarChar(20), payerAccount) // The person ASKING for money
-                    .input('Receiver', sql.VarChar(20), friendAcc) // The person who OWES money
+                    .input('Type', sql.VarChar(20), 'SplitBill') 
+                    .input('Sender', sql.VarChar(20), payerAccount) 
+                    .input('Receiver', sql.VarChar(20), friendAcc)
                     .input('Name', sql.VarChar(100), payerName)
                     .input('Amount', sql.Decimal(15,2), splitAmount)
                     .query(`
@@ -593,7 +582,7 @@ const payLoanInstallment = async (req, res) => {
     try {
         const pool = await sql.connect();
 
-        // Get UserID for the Audit Log
+      
         const userRes = await pool.request()
             .input('Acc', sql.VarChar(20), accountNumber)
             .query(`SELECT UserID FROM dbo.Accounts WHERE AccountNumber = @Acc`);
@@ -603,19 +592,16 @@ const payLoanInstallment = async (req, res) => {
         await transaction.begin();
 
         try {
-            // 1. Deduct from User Account
             await transaction.request()
                 .input('AccNum', sql.VarChar(20), accountNumber)
                 .input('Amount', sql.Decimal(15, 2), paymentAmount)
                 .query(`UPDATE dbo.Accounts SET Balance = Balance - @Amount WHERE AccountNumber = @AccNum`);
 
-            // 2. Reduce Remaining Balance on the Loan
             await transaction.request()
                 .input('LoanID', sql.VarChar(20), loanId)
                 .input('Amount', sql.Decimal(15, 2), paymentAmount)
                 .query(`UPDATE dbo.ActiveLoans SET RemainingBalance = RemainingBalance - @Amount WHERE LoanID = @LoanID`);
 
-            // 3. Create the Repayment Receipt
             const receiptId = `REP-${Date.now().toString().slice(-8)}`;
             await transaction.request()
                 .input('RepaymentID', sql.VarChar(20), receiptId)
@@ -626,7 +612,6 @@ const payLoanInstallment = async (req, res) => {
                     VALUES (@RepaymentID, @LoanID, @Amount, GETDATE(), 'On-Time')
                 `);
 
-            // 4. Ledger Transaction (ReceiverAccount is NULL to avoid FK conflicts)
             const uniqueTrxId = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 100)}`;
             await transaction.request()
                 .input('TransactionID', sql.VarChar(50), uniqueTrxId)
@@ -637,7 +622,6 @@ const payLoanInstallment = async (req, res) => {
                     VALUES (@TransactionID, @Sender, NULL, @Amount, 'Loan Installment Payment', GETDATE(), CONVERT(time, GETDATE()))
                 `);
 
-            // 5. Check if fully paid
             const checkRes = await transaction.request()
                 .input('LoanID', sql.VarChar(20), loanId)
                 .query(`SELECT RemainingBalance FROM dbo.ActiveLoans WHERE LoanID = @LoanID`);
@@ -648,7 +632,6 @@ const payLoanInstallment = async (req, res) => {
             if (remaining <= 0) {
                 const logId = `LOG-${Date.now().toString().slice(-6)}`;
 
-                // We are using 'ACT-TRX' because we ensured it exists in Step 1
                 await transaction.request()
                     .input('LogID', sql.VarChar(50), logId)
                     .input('UID', sql.VarChar(50), userId)
@@ -701,7 +684,6 @@ const createActionRequest = async (req, res) => {
     }
 };
 
-// 2. Fetch Pending Requests for the Bell Icon
 const getPendingRequests = async (req, res) => {
     const { accountNumber } = req.params;
     try {
@@ -715,14 +697,14 @@ const getPendingRequests = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to fetch notifications.' });
     }
 };
-// 3. Process the Approval (The ACID Magic)
+
 const processActionRequest = async (req, res) => {
     const { requestId, action, requestType, senderAcc, receiverAcc, amount } = req.body;
 
     try {
         const pool = await sql.connect();
 
-        // If they click decline, just kill the request
+        
         if (action === 'Reject') {
             await pool.request().input('ID', sql.VarChar(50), requestId).query(`UPDATE dbo.ActionRequests SET Status = 'Rejected' WHERE RequestID = @ID`);
             return res.status(200).json({ success: true, message: 'Request rejected securely.' });
@@ -761,7 +743,7 @@ const processActionRequest = async (req, res) => {
                         .query(`INSERT INTO dbo.Transactions (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime) VALUES (@TID, @Sender, @Receiver, @Amt, 'Approved Escrow Transfer', GETDATE(), CONVERT(time, GETDATE()))`);
                 }
                 else if (requestType === 'SplitBill') {
-                    // Reverse Transfer: The Receiver of the notification is PAYING the Sender
+            
                     await transaction.request()
                         .input('Payer', sql.VarChar(20), receiverAcc)
                         .input('Amt', sql.Decimal(15,2), amount)
@@ -772,7 +754,7 @@ const processActionRequest = async (req, res) => {
                         .input('Amt', sql.Decimal(15,2), amount)
                         .query(`UPDATE dbo.Accounts SET Balance = Balance + @Amt WHERE AccountNumber = @Payee`);
 
-                    // Log it in the Ledger! (Sender=ReceiverAcc, Receiver=SenderAcc)
+                    
                     const trxId = `TRX-${Date.now().toString().slice(-6)}`;
                     await transaction.request()
                         .input('TID', sql.VarChar(50), trxId)
@@ -797,6 +779,125 @@ const processActionRequest = async (req, res) => {
     }
 };
 
+const repayCreditCard = async (req, res) => {
+    const { accountNumber, cardNumber, amount } = req.body;
 
+    try {
+        const pool = await sql.connect();
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
 
-module.exports = { getDashboardData, transferMoney, depositMoney, withdrawMoney, updatePin, getSpendingAnalytics, downloadStatement, applyForLoan, getCustomerLoans, getBeneficiaries, addBeneficiary, removeBeneficiary, splitBill,getActiveLoans, payLoanInstallment,createActionRequest, getPendingRequests, processActionRequest   };
+        try {
+            
+            await transaction.request()
+                .input('AccNum', sql.VarChar(20), accountNumber)
+                .input('Amount', sql.Decimal(15,2), amount)
+                .query(`UPDATE dbo.Accounts SET Balance = Balance - @Amount WHERE AccountNumber = @AccNum`);
+
+            await transaction.request()
+                .input('CardNum', sql.VarChar(20), cardNumber)
+                .input('Amount', sql.Decimal(15,2), amount)
+                .query(`UPDATE dbo.ActiveCreditCards SET OutstandingBalance = OutstandingBalance - @Amount WHERE CardNumber = @CardNum`);
+
+            const repayId = `CC-REP-${Date.now().toString().slice(-6)}`;
+            await transaction.request()
+                .input('RepID', sql.VarChar(20), repayId)
+                .input('CardNum', sql.VarChar(20), cardNumber)
+                .input('Amount', sql.Decimal(15,2), amount)
+                .query(`
+                    INSERT INTO dbo.CreditRepayments (RepaymentID, CardNumber, AmountPaid, PaymentDate) 
+                    VALUES (@RepID, @CardNum, @Amount, GETDATE())
+                `);
+
+            
+            const trxId = `TRX-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 100)}`;
+            await transaction.request()
+                .input('TrxID', sql.VarChar(50), trxId)
+                .input('Sender', sql.VarChar(20), accountNumber)
+                .input('Amount', sql.Decimal(15,2), amount)
+                .query(`
+                    INSERT INTO dbo.Transactions (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime) 
+                    VALUES (@TrxID, @Sender, NULL, @Amount, 'Credit Card Bill Payment', GETDATE(), CONVERT(time, GETDATE()))
+                `);
+
+            await transaction.commit();
+            res.status(200).json({ 
+                success: true, 
+                message: `Successfully paid Rs. ${amount} towards your credit card.` 
+            });
+
+        } catch (txErr) {
+            await transaction.rollback();
+            throw txErr;
+        }
+    } catch (err) {
+        console.error('CC Repayment Error:', err);
+        res.status(500).json({ success: false, message: 'Failed to process credit card payment.' });
+    }
+};
+
+const simulateCardPurchase = async (req, res) => {
+    const { cardNumber, amount, accountNumber } = req.body;
+
+    try {
+        const pool = await sql.connect();
+        const transaction = new sql.Transaction(pool);
+        await transaction.begin();
+
+        try {
+            const last4 = cardNumber.slice(-4);
+            const updateRes = await transaction.request()
+                .input('Last4', sql.VarChar(4), last4)
+                .input('Amount', sql.Decimal(15,2), amount)
+                .query(`
+                    UPDATE dbo.ActiveCreditCards 
+                    SET OutstandingBalance = ISNULL(OutstandingBalance, 0) + @Amount 
+                    WHERE CardNumber LIKE '%' + @Last4
+                `);
+
+           
+           
+           
+            const trxId = `SHOP-${Date.now().toString().slice(-6)}`;
+            await transaction.request()
+                .input('TrxID', sql.VarChar(50), trxId)
+                .input('Sender', sql.VarChar(20), accountNumber) 
+                .input('Amt', sql.Decimal(15,2), amount)
+                .query(`
+                    INSERT INTO dbo.Transactions (TransactionID, SenderAccount, ReceiverAccount, Amount, TransactionType, TransactionDate, TransactionTime) 
+                    VALUES (@TrxID, @Sender, NULL, @Amt, 'Credit Purchase', GETDATE(), CONVERT(time, GETDATE()))
+                `);
+
+            await transaction.commit();
+            res.status(200).json({ success: true, message: 'Purchase simulated successfully!' });
+
+        } catch (txErr) {
+            await transaction.rollback();
+            throw txErr;
+        }
+    } catch (err) {
+        console.error('Simulation Error:', err);
+        res.status(500).json({ success: false, message: 'Simulation failed.' });
+    }
+};
+
+const getCustomerCards = async (req, res) => {
+    const { accountNumber } = req.params;
+    try {
+        const pool = await sql.connect();
+        
+        const result = await pool.request()
+            .input('AccNum', sql.VarChar(20), accountNumber)
+            .query(`
+                SELECT CardNumber, CreditLimit, ISNULL(OutstandingBalance, 0) AS OutstandingBalance, CardTier, IssueDate, ExpiryDate 
+                FROM dbo.ActiveCreditCards 
+                WHERE AccountNumber = @AccNum
+            `);
+            
+        res.status(200).json({ success: true, cards: result.recordset });
+    } catch (err) {
+        console.error('Fetch Cards Error:', err);
+        res.status(500).json({ success: false, message: 'Failed to fetch cards.' });
+    }
+};
+module.exports = { getDashboardData, transferMoney, depositMoney, withdrawMoney, updatePin, getSpendingAnalytics, downloadStatement, applyForLoan, getCustomerLoans, getBeneficiaries, addBeneficiary, removeBeneficiary, splitBill,getActiveLoans, payLoanInstallment,createActionRequest, getPendingRequests, processActionRequest ,repayCreditCard, simulateCardPurchase, getCustomerCards}; 

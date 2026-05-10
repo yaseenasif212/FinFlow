@@ -24,6 +24,9 @@ const { splitBill } = require('../controller/customerController');
 
 const { createActionRequest, getPendingRequests, processActionRequest } = require('../controller/customerController');
 
+const { repayCreditCard } = require('../controller/customerController');
+const { simulateCardPurchase } = require('../controller/customerController');
+const { getCustomerCards } = require('../controller/customerController');
 router.get('/dashboard', verifyToken, getDashboardData);
 
 
@@ -64,6 +67,12 @@ router.post('/loans/repay', verifyToken, payLoanInstallment);
 router.post('/actions/request', verifyToken, createActionRequest);
 router.get('/actions/pending/:accountNumber', verifyToken, getPendingRequests);
 router.post('/actions/process', verifyToken, processActionRequest);
+
+
+
+router.post('/cards/repay', verifyToken, repayCreditCard);
+router.post('/cards/simulate-purchase', verifyToken, simulateCardPurchase);
+router.get('/cards/:accountNumber', verifyToken, getCustomerCards);
 module.exports = router;
 
 

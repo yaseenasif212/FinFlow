@@ -10,12 +10,12 @@ const Register = () => {
         accountType: 'Current'
     });
     
-    // TOAST STATE
+  
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
-    // Helper to show modern toast notifications
+  
     const showToast = (message, type = 'success') => {
         setToast({ show: true, message, type });
         setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
@@ -25,13 +25,14 @@ const Register = () => {
         const { name, value } = e.target;
         let formattedValue = value;
 
-        // CONSTRAINT: Name can ONLY contain alphabets and spaces (No numbers or special characters)
+        
         if (name === 'name') {
             formattedValue = value.replace(/[^a-zA-Z\s]/g, '');
         }
-        // CONSTRAINT: CNIC strictly numbers, no negatives, auto-formatted
+       
         else if (name === 'cnic') {
-            const rawDigits = value.replace(/\D/g, ''); // \D removes everything that isn't a 0-9 digit
+            const rawDigits = value.replace(/\D/g, ''); 
+            
             if (rawDigits.length <= 5) {
                 formattedValue = rawDigits;
             } else if (rawDigits.length <= 12) {
@@ -40,7 +41,7 @@ const Register = () => {
                 formattedValue = `${rawDigits.slice(0, 5)}-${rawDigits.slice(5, 12)}-${rawDigits.slice(12, 13)}`;
             }
         } 
-        // CONSTRAINT: Phone strictly numbers, no negatives, auto-formatted
+  
         else if (name === 'phone') {
             const rawDigits = value.replace(/\D/g, '');
             if (rawDigits.length <= 4) {
@@ -49,7 +50,7 @@ const Register = () => {
                 formattedValue = `${rawDigits.slice(0, 4)}-${rawDigits.slice(4, 11)}`;
             }
         }
-        // CONSTRAINT: PIN strictly 4 numbers
+        
         else if (name === 'transactionPin') {
             formattedValue = value.replace(/\D/g, '').slice(0, 4);
         }
@@ -60,7 +61,7 @@ const Register = () => {
     const handleRegister = async (e) => {
         e.preventDefault();
 
-        // 1. Check for empty fields
+     
         const requiredFields = ['name', 'cnic', 'email', 'password', 'phone', 'address', 'transactionPin'];
         for (let field of requiredFields) {
             if (!formData[field].trim()) {
@@ -68,18 +69,19 @@ const Register = () => {
             }
         }
 
-        // 2. Strict Email Regex Validation
+       
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) {
             return showToast("Please enter a valid email format.", "error");
         }
 
-        // 3. Password Length
+      
         if (formData.password.length < 6) {
             return showToast("Password must be at least 6 characters long.", "error");
         }
 
-        // 4. Exact Digit Length Constraints
+      
+        
         if (formData.cnic.length !== 15) {
             return showToast('CNIC must be exactly 13 digits.', 'error');
         }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
-    ShieldCheck, Loader2, Plus, Clock, XCircle, CheckCircle2, Trash2, Landmark, CreditCard, ChevronRight, AlertCircle, X 
+    ShieldCheck, Loader2, Plus, Clock, XCircle, CheckCircle2, Trash2, Landmark, CreditCard, ChevronRight, AlertCircle, X, ShoppingBag, Eye, EyeOff
 } from 'lucide-react'; 
 import Sidebar from '../components/Sidebar'; 
 
@@ -15,19 +15,17 @@ const CardManagement = () => {
     const [applications, setApplications] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     
-    // Toast Notification State
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-
-    // Application Form State
     const [isApplying, setIsApplying] = useState(false);
     const [requestedLimit, setRequestedLimit] = useState(50000);
 
-    // Repayment States
     const [activeRepayCard, setActiveRepayCard] = useState(null); 
     const [repayAmount, setRepayAmount] = useState('');
     const [isRepaying, setIsRepaying] = useState(false);
 
-    // Helper to show modern toast notifications instead of alerts
+    
+    const [revealedCard, setRevealedCard] = useState(null);
+
     const showToast = (message, type = 'success') => {
         setToast({ show: true, message, type });
         setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
@@ -45,7 +43,9 @@ const CardManagement = () => {
 
                 if (accNum) {
                     const cardsRes = await axios.get(`http://localhost:5000/api/customer/cards/${accNum}`, { headers: { Authorization: `Bearer ${token}` }});
-                    if (cardsRes.data.success) setCards(cardsRes.data.cards);
+                    if (cardsRes.data.success) {
+                        setCards(cardsRes.data.cards);
+                    }
 
                     const appsRes = await axios.get(`http://localhost:5000/api/customer/cards/applications/${accNum}`, { headers: { Authorization: `Bearer ${token}` }});
                     if (appsRes.data.success) setApplications(appsRes.data.applications);
@@ -69,11 +69,9 @@ const CardManagement = () => {
 
     const handleApply = async (e) => {
         e.preventDefault();
-        
-        // STRICT CONSTRAINT: Ensure requested limit is in multiples of 10,000
         const limitNum = parseInt(requestedLimit);
         if (limitNum % 10000 !== 0) {
-            return showToast("Requested limit must be in multiples of 10,000 (e.g., 10000, 20000, 50000).", "error");
+            return showToast("Requested limit must be in multiples of 10,000.", "error");
         }
 
         setIsApplying(true);
@@ -135,8 +133,22 @@ const CardManagement = () => {
             showToast('Virtual card securely destroyed.');
             setTimeout(() => window.location.reload(), 1500); 
         } catch (err) {
-            console.error(err);
             showToast('Failed to delete card.', 'error');
+        }
+    };
+
+   const handleSimulatePurchase = async (cardNumber) => {
+        const amount = 5000; 
+        try {
+            const token = localStorage.getItem('finflow_token');
+            await axios.post('http://localhost:5000/api/customer/cards/simulate-purchase', 
+                { cardNumber, amount, accountNumber }, 
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            showToast(`Spent Rs. ${amount} on your card!`);
+            setTimeout(() => window.location.reload(), 1500); 
+        } catch (err) {
+            showToast('Simulation failed. Check backend console.', 'error');
         }
     };
 
@@ -149,7 +161,6 @@ const CardManagement = () => {
         <div className="bg-[#f7f9ff] font-sans text-slate-900 flex overflow-hidden h-screen relative">
             <Sidebar />
 
-            {/* TOAST NOTIFICATION */}
             {toast.show && (
                 <div className={`fixed bottom-8 right-8 z-50 flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl transition-all duration-300 text-white font-bold text-sm ${toast.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`}>
                     {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
@@ -179,7 +190,6 @@ const CardManagement = () => {
 
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                         
-                        {/* LEFT COLUMN: ACTIVE CARDS */}
                         <section className="col-span-12 lg:col-span-7">
                             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60 mb-8">
                                 <h3 className="font-serif text-xl text-indigo-950 font-bold mb-6 flex items-center gap-2">
@@ -189,11 +199,20 @@ const CardManagement = () => {
                                 {cards.length > 0 ? (
                                     <div className="space-y-6">
                                         {cards.map(card => {
+                                           
+                                            const isRevealed = revealedCard === card.CardNumber;
+                                           
                                             const maskedCard = card.CardNumber.replace(/(\d{4})(\d{8})(\d{4})/, '$1 •••• •••• $3');
+                                            const unmaskedCard = card.CardNumber.replace(/(\d{4})(?=\d)/g, '$1 ');
                                             
-                                            const outstanding = parseFloat(card.OutstandingBalance || 0);
+                                           
+                                            const expiryDate = new Date(card.ExpiryDate);
+                                            const formattedExpiry = `${String(expiryDate.getMonth() + 1).padStart(2, '0')}/${String(expiryDate.getFullYear()).slice(2)}`;
+                                            const demoCvv = (parseInt(card.CardNumber.slice(-4)) % 900) + 100; // Consistent random-looking 3 digits
+
+                                            const rawBalance = card.OutstandingBalance || card.outstandingBalance || card.AvailableCredit || 0;
+                                            const outstanding = Math.abs(parseFloat(rawBalance));
                                             const limit = parseFloat(card.CreditLimit || 0);
-                                            const available = limit - outstanding;
                                             const spentPercentage = limit > 0 ? (outstanding / limit) * 100 : 0;
 
                                             return (
@@ -204,6 +223,15 @@ const CardManagement = () => {
                                                         <div className="flex justify-between items-start mb-8 relative z-10">
                                                             <div className="font-serif italic tracking-wider">FinFlow Platinum</div>
                                                             <div className="flex items-center gap-4">
+                                                                {/* REVEAL DETAILS BUTTON */}
+                                                                <button 
+                                                                    onClick={() => setRevealedCard(isRevealed ? null : card.CardNumber)}
+                                                                    className="p-1.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors flex items-center justify-center"
+                                                                    title={isRevealed ? "Hide Details" : "Reveal Details"}
+                                                                >
+                                                                    {isRevealed ? <EyeOff size={16} /> : <Eye size={16} />}
+                                                                </button>
+
                                                                 <button 
                                                                     onClick={() => handleDeleteCard(card.CardNumber, outstanding)}
                                                                     className="p-1.5 bg-red-500/20 hover:bg-red-500/80 rounded-full text-white transition-colors opacity-0 group-hover:opacity-100" 
@@ -215,9 +243,24 @@ const CardManagement = () => {
                                                             </div>
                                                         </div>
                                                         
-                                                        <p className="font-mono text-xl tracking-[0.2em] mb-6 relative z-10">{maskedCard}</p>
+                                                        {/* DYNAMIC CARD NUMBER */}
+                                                        <p className="font-mono text-xl tracking-[0.2em] mb-4 relative z-10 transition-all duration-300">
+                                                            {isRevealed ? unmaskedCard : maskedCard}
+                                                        </p>
+
+                                                        {/* REVEALED EXPIRY AND CVV */}
+                                                        <div className={`flex gap-6 mb-4 font-mono text-sm relative z-10 transition-all duration-300 ${isRevealed ? 'opacity-100 h-auto' : 'opacity-0 h-0 overflow-hidden'}`}>
+                                                            <div>
+                                                                <span className="text-[8px] uppercase tracking-widest text-slate-400 block mb-0.5 font-sans">Valid Thru</span>
+                                                                <span>{formattedExpiry}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-[8px] uppercase tracking-widest text-slate-400 block mb-0.5 font-sans">CVV</span>
+                                                                <span>{demoCvv}</span>
+                                                            </div>
+                                                        </div>
                                                         
-                                                        <div className="flex justify-between items-end relative z-10">
+                                                        <div className="flex justify-between items-end relative z-10 mt-2">
                                                             <div>
                                                                 <p className="text-[10px] text-red-300 uppercase tracking-widest mb-1">Outstanding Bill</p>
                                                                 <p className="font-bold text-lg text-white">Rs. {outstanding.toLocaleString()}</p>
@@ -233,18 +276,26 @@ const CardManagement = () => {
                                                         </div>
                                                     </div>
 
-                                                    {/* REPAYMENT UI */}
-                                                    {outstanding > 0 && activeRepayCard !== card.CardNumber && (
+                                                    <div className="flex justify-end gap-3 mt-2">
                                                         <button 
-                                                            onClick={() => setActiveRepayCard(card.CardNumber)}
-                                                            className="self-end px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 border border-emerald-200"
+                                                            onClick={() => handleSimulatePurchase(card.CardNumber)}
+                                                            className="px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 border border-indigo-200"
                                                         >
-                                                            <CreditCard size={14} /> Settle Outstanding Bill
+                                                            <ShoppingBag size={14} /> Simulate 5k Purchase
                                                         </button>
-                                                    )}
+
+                                                        {outstanding > 0 && activeRepayCard !== card.CardNumber && (
+                                                            <button 
+                                                                onClick={() => setActiveRepayCard(card.CardNumber)}
+                                                                className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 border border-emerald-200"
+                                                            >
+                                                                <CreditCard size={14} /> Settle Outstanding Bill
+                                                            </button>
+                                                        )}
+                                                    </div>
 
                                                     {activeRepayCard === card.CardNumber && (
-                                                        <form onSubmit={(e) => handleRepaySubmit(e, outstanding)} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
+                                                        <form onSubmit={(e) => handleRepaySubmit(e, outstanding)} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 mt-2">
                                                             <div className="flex justify-between items-center">
                                                                 <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Repayment Amount</p>
                                                                 <button type="button" onClick={() => setActiveRepayCard(null)} className="text-slate-400 hover:text-slate-600"><XCircle size={16}/></button>
@@ -281,9 +332,7 @@ const CardManagement = () => {
                             </div>
                         </section>
 
-                        {/* RIGHT COLUMN: APPLICATION FORM & STATUS TRACKER */}
                         <section className="col-span-12 lg:col-span-5 space-y-8">
-                            
                             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60">
                                 <h3 className="font-serif text-xl text-indigo-950 font-bold mb-4 flex items-center gap-2">
                                     <Plus className="text-emerald-600" /> Request New Card
@@ -336,7 +385,6 @@ const CardManagement = () => {
                                     )}
                                 </div>
                             </div>
-
                         </section>
                     </div>
                 </div>

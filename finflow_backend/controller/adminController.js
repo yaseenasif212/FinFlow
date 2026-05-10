@@ -1,6 +1,6 @@
 const { sql } = require('../config/db');
 
-// 1. Fetch Users + their Account Status
+
 const getAllUsers = async (req, res) => {
     try {
         const pool = await sql.connect();
@@ -19,7 +19,7 @@ const getAllUsers = async (req, res) => {
     }
 };
 
-// 2. The Power to Freeze/Unfreeze
+
 const toggleAccountStatus = async (req, res) => {
     const { userId } = req.params;
     const { currentStatus } = req.body;
@@ -50,7 +50,7 @@ const toggleAccountStatus = async (req, res) => {
     }
 };
 
-// 3. Fetch the Global Ledger (All Transactions)
+
 const getAllTransactions = async (req, res) => {
     try {
         const pool = await sql.connect();
@@ -67,7 +67,7 @@ const getAllTransactions = async (req, res) => {
     }
 };
 
-// 4. Fetch Security & Audit Logs
+
 const getAuditLogs = async (req, res) => {
     try {
         const pool = await sql.connect();
@@ -143,9 +143,7 @@ const approveLoan = async (req, res) => {
     }
 };
 
-// ==========================================
-// ADMIN: Fetch Pending Queues
-// ==========================================
+
 const getPendingApplications = async (req, res) => {
     try {
         const pool = await sql.connect();

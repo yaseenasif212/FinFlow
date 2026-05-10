@@ -1,8 +1,6 @@
 const { sql } = require('../config/db');
 
-// ==========================================
-// 1. CUSTOMER: Apply for Virtual Card
-// ==========================================
+
 const applyForCard = async (req, res) => {
     const { accountNumber, requestedLimit } = req.body; 
 
@@ -44,9 +42,7 @@ const applyForCard = async (req, res) => {
     }
 };
 
-// ==========================================
-// 2. CUSTOMER: Fetch Active Virtual Cards
-// ==========================================
+
 const getActiveCards = async (req, res) => {
     const { accountNumber } = req.params; 
 
@@ -72,9 +68,7 @@ const getActiveCards = async (req, res) => {
     }
 };
 
-// ==========================================
-// 3. ADMIN: Approve Card Application
-// ==========================================
+
 const approveCard = async (req, res) => {
     const { applicationId, accountNumber, approvedLimit } = req.body;
 
@@ -110,9 +104,7 @@ const approveCard = async (req, res) => {
     }
 };
 
-// ==========================================
-// 4. ADMIN: Fetch Pending Card Applications
-// ==========================================
+
 const getPendingCardApps = async (req, res) => {
     try {
         const pool = await sql.connect();
@@ -129,9 +121,7 @@ const getPendingCardApps = async (req, res) => {
     }
 };
 
-// ==========================================
-// 5. ADMIN: Reject Card Application
-// ==========================================
+
 const rejectCard = async (req, res) => {
     const { applicationId } = req.body;
 
@@ -154,9 +144,6 @@ const rejectCard = async (req, res) => {
     }
 };
 
-// ==========================================
-// 6. CUSTOMER: Fetch My Application History
-// ==========================================
 const getMyApplications = async (req, res) => {
     const { accountNumber } = req.params;
     try {

@@ -10,7 +10,8 @@ const Login = () => {
     const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
-    // TOAST STATE
+   
+
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
     const showToast = (message, type = 'success') => {
@@ -21,20 +22,18 @@ const Login = () => {
     const handleLogin = async (e) => {
         e.preventDefault();
 
-        // --- STRICT CONSTRAINTS ---
-
-        // 1. Empty Check
+      
         if (!email.trim() || !password.trim()) {
             return showToast("Please fill in all fields.", "error");
         }
 
-        // 2. Strict Email Regex Validation
+
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return showToast("Please enter a valid email format.", "error");
         }
 
-        // 3. Password Minimum Length Check
+
         if (password.length < 6) {
             return showToast("Invalid password length.", "error");
         }

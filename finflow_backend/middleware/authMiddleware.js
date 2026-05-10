@@ -1,7 +1,7 @@
-// finflow_backend/middleware/authMiddleware.js
+
 const jwt = require('jsonwebtoken');
 
-// Middleware 1: Verify they are logged in AT ALL
+
 const verifyToken = (req, res, next) => {
     const token = req.header('Authorization');
 
@@ -18,7 +18,7 @@ const verifyToken = (req, res, next) => {
     }
 };
 
-// Middleware 2: Verify they are specifically an ADMIN
+
 const verifyAdmin = (req, res, next) => {
     if (req.user && req.user.role === 'Admin') {
         next(); 

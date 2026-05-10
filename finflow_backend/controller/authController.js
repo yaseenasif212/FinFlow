@@ -8,7 +8,7 @@ const loginUser = async (req, res) => {
     try {
         const pool = await sql.connect();
 
-        // 1. Check if Email Exists
+        
         const userResult = await pool.request()
             .input('Email', sql.VarChar, email)
             .query(`SELECT UserID, Name, Role, Password FROM Users WHERE Email = @Email`);
@@ -19,7 +19,8 @@ const loginUser = async (req, res) => {
 
         const user = userResult.recordset[0];
 
-        // 2. Prevent Brute Force Attacks
+        
+
         const bruteForceCheck = await pool.request()
             .input('UserID', sql.VarChar, user.UserID)
             .query(`
@@ -35,7 +36,6 @@ const loginUser = async (req, res) => {
             return res.status(429).json({ success: false, message: 'Account locked due to multiple failed attempts.' });
         }
 
-        // 3. Verify Password using BCRYPT (Combined with your failed log logic!)
         const isMatch = await bcrypt.compare(password, user.Password);
 
         if (!isMatch) { 
@@ -49,7 +49,7 @@ const loginUser = async (req, res) => {
             return res.status(401).json({ success: false, message: 'Invalid credentials.' });
         }
 
-        // 4. Fetch Basic Account Summary
+        
         const accountSummary = await pool.request()
             .input('UserID', sql.VarChar, user.UserID)
             .query(`
@@ -58,7 +58,7 @@ const loginUser = async (req, res) => {
                 WHERE UserID = @UserID
             `);
 
-        // 5. Log Successful Login
+       
         const successLogId = `LOG-${Date.now().toString().slice(-10)}`;
         await pool.request()
             .input('LogID', sql.VarChar, successLogId)
@@ -66,7 +66,7 @@ const loginUser = async (req, res) => {
             .query(`INSERT INTO AuditLogs (LogID, UserID, ActionID, LogDate, LogTime) 
                     VALUES (@LogID, @UserID, 'ACT-01', CAST(GETDATE() AS DATE), CAST(GETDATE() AS TIME))`);
 
-        // 6. Generate JWT Token
+        
         const token = jwt.sign(
             { id: user.UserID, role: user.Role, UserID: user.UserID }, 
             process.env.JWT_SECRET || 'fallback_secret', 
@@ -104,7 +104,7 @@ const registerUser = async (req, res) => {
 
         const pool = await sql.connect();
 
-        // 1. Check for duplicates
+       
         const existingUser = await pool.request()
             .input('Email', sql.VarChar, email)
             .input('CNIC', sql.VarChar, cnic)
@@ -114,11 +114,38 @@ const registerUser = async (req, res) => {
             return res.status(400).json({ success: false, message: 'An account with this Email or CNIC already exists.' });
         }
 
-        // 2. Generate Unique IDs (Using U- and PK-FIN- formats)
-        const newUserId = `U-${Math.floor(10000 + Math.random() * 90000)}`; 
-        const newAccountNumber = `PK-FIN-${Math.floor(1000 + Math.random() * 9000)}`;
+        
+        
+        let isUserUnique = false;
+        let newUserId = '';
+        
+       
+        while (!isUserUnique) {
+            newUserId = `U-${Math.floor(10000 + Math.random() * 90000)}`;
+            const checkRes = await pool.request()
+                .input('CheckUID', sql.VarChar, newUserId)
+                .query(`SELECT COUNT(*) as count FROM Users WHERE UserID = @CheckUID`);
+                
+            if (checkRes.recordset[0].count === 0) {
+                isUserUnique = true;
+            }
+        }
 
-        // 3. Insert the new User into [Users] table
+        let isAccUnique = false;
+        let newAccountNumber = '';
+        
+      
+        while (!isAccUnique) {
+            newAccountNumber = `PK-FIN-${Math.floor(1000 + Math.random() * 9000)}`;
+            const checkAccRes = await pool.request()
+                .input('CheckAcc', sql.VarChar, newAccountNumber)
+                .query(`SELECT COUNT(*) as count FROM Accounts WHERE AccountNumber = @CheckAcc`);
+                
+            if (checkAccRes.recordset[0].count === 0) {
+                isAccUnique = true;
+            }
+        }
+     
         await pool.request()
             .input('UserID', sql.VarChar, newUserId)
             .input('Name', sql.VarChar, name)
@@ -133,7 +160,7 @@ const registerUser = async (req, res) => {
                 VALUES (@UserID, @Name, @CNIC, @Email, @Password, @Phone, @Address, @Role)
             `);
 
-        // 4. Insert the new Bank Account with their CHOSEN type
+    
         await pool.request()
             .input('NewAccNumber', sql.VarChar, newAccountNumber)
             .input('NewUserID', sql.VarChar, newUserId) 
@@ -143,7 +170,7 @@ const registerUser = async (req, res) => {
                 INSERT INTO Accounts (AccountNumber, UserID, Balance, AccountStatus, TransactionPin, AccountType)
                 VALUES (@NewAccNumber, @NewUserID, 5000.00, 'Active', @Pin, @AccType)`);
         
-        // 5. Send success response
+       
         res.status(201).json({ 
             success: true, 
             message: 'Registration successful! You can now log in.' 

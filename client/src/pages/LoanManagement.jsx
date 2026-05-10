@@ -147,7 +147,7 @@ const LoanManagement = () => {
     const estimatedTotal = parseFloat(formData.amount || 0) * 1.05;
     const estimatedMonthly = estimatedTotal / parseInt(formData.repaymentDuration || 1);
 
-    // Filter logic to hide the box if loan is paid
+    
     const visibleLoans = activeLoans.filter(loan => parseFloat(loan.RemainingBalance) > 0);
     const hasPendingApp = applications.some(app => app.Status === 'Pending');
 

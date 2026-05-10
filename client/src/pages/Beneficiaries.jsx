@@ -15,13 +15,13 @@ const Beneficiaries = () => {
     const [beneficiaries, setBeneficiaries] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     
-    // Toast Notification State
+    
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     
-    // Delete Modal/Confirmation State
+   
     const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null });
     
-    // Add Contact Form State
+    
     const [isAdding, setIsAdding] = useState(false);
     const [newContact, setNewContact] = useState({ nickname: '', accountNumber: '' });
 
