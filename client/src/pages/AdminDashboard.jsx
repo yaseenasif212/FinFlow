@@ -19,6 +19,8 @@ const AdminDashboard = () => {
     const [searchQuery, setSearchQuery] = useState(''); 
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
     
+    const [globalStats, setGlobalStats] = useState({ users: '--', transactions: '--', pendingLoansCount: 0 });
+    
     const navigate = useNavigate();
     const adminUser = JSON.parse(localStorage.getItem('finflow_user') || '{}');
 
@@ -27,6 +29,39 @@ const AdminDashboard = () => {
         setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
     };
 
+    useEffect(() => {
+        const fetchGlobalStats = async () => {
+            const token = localStorage.getItem('finflow_token');
+            if (!token || adminUser.role !== 'Admin') return;
+            
+            try {
+              
+                const statsRes = await axios.get('http://localhost:5000/api/admin/dashboard', { headers: { Authorization: `Bearer ${token}` } });
+                if (statsRes.data.success) {
+                    setGlobalStats(prev => ({
+                        ...prev,
+                        users: statsRes.data.totalUsers,
+                        transactions: statsRes.data.totalTransactions
+                    }));
+                }
+                
+                const loansRes = await axios.get('http://localhost:5000/api/admin/applications/pending', { headers: { Authorization: `Bearer ${token}` } });
+                if (loansRes.data.success) {
+                    setGlobalStats(prev => ({
+                        ...prev,
+                        pendingLoansCount: loansRes.data.pendingLoans.length
+                    }));
+                    setPendingLoans(loansRes.data.pendingLoans); 
+                }
+            } catch (err) {
+                console.error("Failed to load initial global dashboard stats.");
+            }
+        };
+
+        fetchGlobalStats();
+    }, [adminUser.role]);
+
+   
     useEffect(() => {
         const fetchData = async () => {
             const token = localStorage.getItem('finflow_token');
@@ -50,10 +85,14 @@ const AdminDashboard = () => {
                     if (res.data.success) setLogs(res.data.logs);
                 } else if (activeTab === 'loans') {
                     const res = await axios.get('http://localhost:5000/api/admin/applications/pending', { headers: { Authorization: `Bearer ${token}` } });
-                    if (res.data.success) setPendingLoans(res.data.pendingLoans);
+                    if (res.data.success) {
+                        setPendingLoans(res.data.pendingLoans);
+                        setGlobalStats(prev => ({ ...prev, pendingLoansCount: res.data.pendingLoans.length })); // Sync the dot
+                    }
                 }
             } catch (err) {
                 setError('Failed to fetch data. Access Denied.');
+                showToast('Failed to fetch data', 'error');
             } finally {
                 setLoading(false);
             }
@@ -72,6 +111,7 @@ const AdminDashboard = () => {
             
             if(res.data.success) {
                 setUsers(users.map(u => u.UserID === userId ? { ...u, AccountStatus: res.data.newStatus } : u));
+                showToast(`User status updated to ${res.data.newStatus}`);
             }
         } catch (err) {
             showToast('Failed to update status.', 'error');
@@ -86,10 +126,11 @@ const AdminDashboard = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             showToast('Loan approved! Funds securely injected into customer account.');
+           
             setPendingLoans(prev => prev.filter(loan => loan.LoanID !== loanId)); 
+            setGlobalStats(prev => ({ ...prev, pendingLoansCount: Math.max(0, prev.pendingLoansCount - 1) }));
         } catch (err) {
             showToast('Error processing approval.', 'error');
-            console.error(err);
         } finally {
             setProcessingId(null);
         }
@@ -103,10 +144,12 @@ const AdminDashboard = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             showToast('Loan application successfully rejected.');
+            
+            
             setPendingLoans(prev => prev.filter(loan => loan.LoanID !== loanId)); 
+            setGlobalStats(prev => ({ ...prev, pendingLoansCount: Math.max(0, prev.pendingLoansCount - 1) }));
         } catch (err) {
             showToast('Error processing rejection.', 'error');
-            console.error(err);
         } finally {
             setProcessingId(null);
         }
@@ -165,7 +208,7 @@ const AdminDashboard = () => {
             
             {toast.show && (
                 <div className={`fixed bottom-8 right-8 z-50 flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl transition-all duration-300 text-white font-bold text-sm ${toast.type === 'error' ? 'bg-red-500' : 'bg-[#2eb998]'}`}>
-                    {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+                    {toast.type === 'error' ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
                     {toast.message}
                     <button onClick={() => setToast({ show: false, message: '', type: 'success' })} className="ml-4 hover:opacity-75 transition-opacity">
                         <X size={16} />
@@ -195,14 +238,16 @@ const AdminDashboard = () => {
                         <div className="bg-blue-50 p-4 rounded-full text-blue-500"><Users size={28} /></div>
                         <div>
                             <p className="text-sm text-slate-500 font-medium">Total Users</p>
-                            <p className="text-3xl font-bold text-slate-800">{users.length || '--'}</p>
+                            {/* UPDATED TO USE GLOBAL STATS */}
+                            <p className="text-3xl font-bold text-slate-800">{globalStats.users}</p>
                         </div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
                         <div className="bg-purple-50 p-4 rounded-full text-purple-500"><ArrowRightLeft size={28} /></div>
                         <div>
                             <p className="text-sm text-slate-500 font-medium">Total Transactions</p>
-                            <p className="text-3xl font-bold text-slate-800">{transactions.length || '--'}</p>
+                            {/* UPDATED TO USE GLOBAL STATS */}
+                            <p className="text-3xl font-bold text-slate-800">{globalStats.transactions}</p>
                         </div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
@@ -228,8 +273,9 @@ const AdminDashboard = () => {
                     <button onClick={() => handleTabSwitch('logs')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors ${activeTab === 'logs' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
                         Security Logs
                     </button>
+                    {/* UPDATED NOTIFICATION BADGE */}
                     <button onClick={() => handleTabSwitch('loans')} className={`whitespace-nowrap px-4 py-2 font-bold transition-colors flex items-center gap-2 ${activeTab === 'loans' ? 'text-[#2eb998] border-b-2 border-[#2eb998]' : 'text-slate-400 hover:text-slate-600'}`}>
-                        Loan Approvals {pendingLoans.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pendingLoans.length}</span>}
+                        Loan Approvals {globalStats.pendingLoansCount > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{globalStats.pendingLoansCount}</span>}
                     </button>
                 </div>
 

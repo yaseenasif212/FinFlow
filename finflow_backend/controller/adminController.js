@@ -165,4 +165,40 @@ const getPendingApplications = async (req, res) => {
     }
 };
 
-module.exports = { getAllUsers, toggleAccountStatus, getAllTransactions, getAuditLogs, getPendingApplications, approveLoan };
+const rejectLoan = async (req, res) => {
+    const { loanId } = req.params;
+    
+    try {
+        const pool = await sql.connect();
+        // Just update the status to Rejected
+        await pool.request()
+            .input('LoanID', sql.VarChar(20), loanId)
+            .query(`UPDATE dbo.LoanApplications SET Status = 'Rejected' WHERE LoanID = @LoanID`);
+            
+        res.status(200).json({ success: true, message: 'Loan application rejected.' });
+    } catch (err) {
+        console.error('Reject Loan Error:', err);
+        res.status(500).json({ success: false, message: 'Server error while rejecting loan.' });
+    }
+};
+const getAdminDashboardStats = async (req, res) => {
+    try {
+        const pool = await sql.connect();
+        
+        // Count total users
+        const users = await pool.request().query(`SELECT COUNT(*) as count FROM dbo.Users WHERE Role = 'Customer'`);
+        
+        // Count total transactions
+        const transactions = await pool.request().query(`SELECT COUNT(*) as count FROM dbo.Transactions`);
+
+        res.status(200).json({
+            success: true,
+            totalUsers: users.recordset[0].count,
+            totalTransactions: transactions.recordset[0].count
+        });
+    } catch (err) {
+        console.error('Error fetching admin stats:', err);
+        res.status(500).json({ success: false, message: 'Server error while fetching stats.' });
+    }
+};
+module.exports = { getAllUsers, toggleAccountStatus, getAllTransactions, getAuditLogs, getPendingApplications, approveLoan,rejectLoan, getAdminDashboardStats };

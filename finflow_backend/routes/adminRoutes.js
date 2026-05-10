@@ -8,7 +8,8 @@ const { approveCard, getPendingCardApps, rejectCard } = require('../controller/c
 
 
 
-const { getPendingApplications, approveLoan } = require('../controller/adminController');
+const { getPendingApplications, approveLoan,rejectLoan } = require('../controller/adminController');
+const { getAdminDashboardStats } = require('../controller/adminController');
 router.get('/all-users', verifyToken, verifyAdmin, getAllUsers);
 router.put('/toggle-status/:userId', verifyToken, verifyAdmin, toggleAccountStatus);
 router.get('/all-transactions', verifyToken, verifyAdmin, getAllTransactions);
@@ -22,8 +23,9 @@ router.post('/card/approve', verifyToken, approveCard);
 router.post('/card/reject', verifyToken, rejectCard);
 
 router.put('/loans/approve/:loanId', approveLoan); 
+router.put('/loans/reject/:loanId', rejectLoan);
 router.get('/applications/pending', getPendingApplications);
-
+router.get('/dashboard', getAdminDashboardStats);
 
 module.exports = router;
 
